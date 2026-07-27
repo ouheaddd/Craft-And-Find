@@ -1,0 +1,8 @@
+{
+  "block.craftandfind.storage_workbench": "Storage Workbench",
+  "item.craftandfind.storage_workbench": "Storage Workbench",
+  "gui.craftandfind.open_storage": "Nearby storage",
+  "gui.craftandfind.open_recipes": "Recipe book",
+  "gui.craftandfind.search": "Search...",
+  "gui.craftandfind.no_items": "No nearby items"
+}

@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.overyourhead.craftandfind.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "client.CraftingMenuMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

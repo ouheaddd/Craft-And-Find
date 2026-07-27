@@ -1,0 +1,8 @@
+{
+  "block.craftandfind.storage_workbench": "Складской верстак",
+  "item.craftandfind.storage_workbench": "Складской верстак",
+  "gui.craftandfind.open_storage": "Предметы рядом",
+  "gui.craftandfind.open_recipes": "Книга рецептов",
+  "gui.craftandfind.search": "Поиск...",
+  "gui.craftandfind.no_items": "Рядом нет предметов"
+}

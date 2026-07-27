@@ -1,0 +1,116 @@
+package com.overyourhead.craftandfind.common.menu;
+
+import com.overyourhead.craftandfind.CraftAndFindMod;
+import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
+import com.overyourhead.craftandfind.common.recipe.NearbyServerPlaceRecipe;
+import com.overyourhead.craftandfind.common.storage.NearbyStorage;
+import com.overyourhead.craftandfind.core.ModBlocks;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.StackedContents;
+import net.minecraft.world.inventory.ContainerLevelAccess;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.network.PacketDistributor;
+
+public final class StorageWorkbenchMenu extends CraftingMenu {
+    private static final int SNAPSHOT_INTERVAL_TICKS = 20;
+
+    private final ContainerLevelAccess workbenchAccess;
+    private final BlockPos workbenchPos;
+    private final Level level;
+    private final ServerPlayer serverPlayer;
+    private NearbyStorage cachedStorage;
+    private int snapshotTicker;
+
+    public StorageWorkbenchMenu(
+            int containerId,
+            Inventory playerInventory,
+            ContainerLevelAccess access,
+            BlockPos workbenchPos
+    ) {
+        super(containerId, playerInventory, access);
+        this.workbenchAccess = access;
+        this.workbenchPos = workbenchPos.immutable();
+        this.level = playerInventory.player.level();
+        this.serverPlayer = playerInventory.player instanceof ServerPlayer player ? player : null;
+        this.cachedStorage = serverPlayer == null
+                ? NearbyStorage.empty(workbenchPos)
+                : NearbyStorage.scan(level, workbenchPos, CraftAndFindMod.STORAGE_RADIUS);
+        this.snapshotTicker = SNAPSHOT_INTERVAL_TICKS;
+    }
+
+    @Override
+    public boolean stillValid(Player player) {
+        return stillValid(workbenchAccess, player, ModBlocks.STORAGE_WORKBENCH.get());
+    }
+
+    @Override
+    public void fillCraftSlotsStackedContents(StackedContents contents) {
+        super.fillCraftSlotsStackedContents(contents);
+        if (serverPlayer != null) {
+            storage().account(contents);
+        }
+    }
+
+    @Override
+    public void handlePlacement(boolean placeAll, RecipeHolder<?> recipe, ServerPlayer player) {
+        if (recipe.value() instanceof CraftingRecipe) {
+            @SuppressWarnings("unchecked")
+            RecipeHolder<CraftingRecipe> craftingRecipe = (RecipeHolder<CraftingRecipe>) recipe;
+            beginPlacingRecipe();
+            try {
+                new NearbyServerPlaceRecipe(this, refreshStorage()).recipeClicked(player, craftingRecipe, placeAll);
+            } finally {
+                finishPlacingRecipe(craftingRecipe);
+            }
+            sendSnapshot();
+            return;
+        }
+
+        super.handlePlacement(placeAll, recipe, player);
+    }
+
+    @Override
+    public void broadcastChanges() {
+        super.broadcastChanges();
+        if (serverPlayer == null) {
+            return;
+        }
+
+        snapshotTicker++;
+        if (snapshotTicker >= SNAPSHOT_INTERVAL_TICKS) {
+            snapshotTicker = 0;
+            refreshStorage();
+            sendSnapshot();
+        }
+    }
+
+    public NearbyStorage refreshStorage() {
+        if (serverPlayer != null) {
+            cachedStorage = NearbyStorage.scan(level, workbenchPos, CraftAndFindMod.STORAGE_RADIUS);
+        }
+        return cachedStorage;
+    }
+
+    public NearbyStorage storage() {
+        return cachedStorage;
+    }
+
+    public BlockPos workbenchPos() {
+        return workbenchPos;
+    }
+
+    private void sendSnapshot() {
+        if (serverPlayer != null) {
+            PacketDistributor.sendToPlayer(
+                    serverPlayer,
+                    new StorageSnapshotPayload(containerId, cachedStorage.snapshot())
+            );
+        }
+    }
+}

@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " C ",
+    "WTW",
+    "WWW"
+  ],
+  "key": {
+    "C": {
+      "item": "minecraft:compass"
+    },
+    "T": {
+      "item": "minecraft:crafting_table"
+    },
+    "W": {
+      "tag": "minecraft:planks"
+    }
+  },
+  "result": {
+    "id": "craftandfind:storage_workbench",
+    "count": 1
+  }
+}
