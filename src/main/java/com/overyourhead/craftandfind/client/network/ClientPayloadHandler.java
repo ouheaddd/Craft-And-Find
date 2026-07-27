@@ -3,6 +3,7 @@ package com.overyourhead.craftandfind.client.network;
 import com.overyourhead.craftandfind.client.ClientStorageState;
 import com.overyourhead.craftandfind.client.gui.StorageWorkbenchScreen;
 import com.overyourhead.craftandfind.client.render.StorageHighlightRenderer;
+import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.HighlightPositionsPayload;
 import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
 import net.minecraft.client.Minecraft;
@@ -40,5 +41,15 @@ public final class ClientPayloadHandler {
 
     public static void handleHighlightPositions(HighlightPositionsPayload payload, IPayloadContext context) {
         StorageHighlightRenderer.show(payload.positions());
+    }
+
+    public static void handleGhostRecipe(GhostRecipePayload payload, IPayloadContext context) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null || minecraft.player.containerMenu.containerId != payload.containerId()) {
+            return;
+        }
+        if (minecraft.screen instanceof StorageWorkbenchScreen storageScreen) {
+            storageScreen.showGhostRecipe(payload.recipeId());
+        }
     }
 }

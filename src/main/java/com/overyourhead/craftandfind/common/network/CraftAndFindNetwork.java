@@ -2,6 +2,7 @@ package com.overyourhead.craftandfind.common.network;
 
 import com.overyourhead.craftandfind.client.network.ClientPayloadRegistration;
 import com.overyourhead.craftandfind.common.menu.StorageWorkbenchMenu;
+import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.HighlightPositionsPayload;
 import com.overyourhead.craftandfind.common.network.payload.HighlightRequestPayload;
 import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
@@ -39,6 +40,11 @@ public final class CraftAndFindNetwork {
                     HighlightPositionsPayload.STREAM_CODEC,
                     CraftAndFindNetwork::ignoreHighlightPositions
             );
+            registrar.playToClient(
+                    GhostRecipePayload.TYPE,
+                    GhostRecipePayload.STREAM_CODEC,
+                    CraftAndFindNetwork::ignoreGhostRecipe
+            );
         }
     }
 
@@ -62,6 +68,10 @@ public final class CraftAndFindNetwork {
     }
 
     private static void ignoreHighlightPositions(HighlightPositionsPayload payload, IPayloadContext context) {
+        // Dedicated servers register the clientbound payload type without running client code.
+    }
+
+    private static void ignoreGhostRecipe(GhostRecipePayload payload, IPayloadContext context) {
         // Dedicated servers register the clientbound payload type without running client code.
     }
 }

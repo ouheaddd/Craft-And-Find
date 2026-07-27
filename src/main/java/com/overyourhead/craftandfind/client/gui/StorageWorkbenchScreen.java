@@ -1,15 +1,17 @@
 package com.overyourhead.craftandfind.client.gui;
 
 import com.overyourhead.craftandfind.client.ClientStorageState;
+import com.overyourhead.craftandfind.client.gui.workbench.WorkbenchLayout;
+import com.overyourhead.craftandfind.client.gui.workbench.WorkbenchTextures;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.inventory.CraftingScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.CraftingMenu;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.world.inventory.Slot;
 import org.lwjgl.glfw.GLFW;
 
 public final class StorageWorkbenchScreen extends CraftingScreen {
@@ -20,6 +22,8 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
 
     public StorageWorkbenchScreen(CraftingMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
+        imageWidth = WorkbenchLayout.MAIN_WIDTH;
+        imageHeight = WorkbenchLayout.MAIN_HEIGHT;
     }
 
     @Override
@@ -37,24 +41,91 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
             }
         }
 
-        storagePanel = new StoragePanel(font, menu.containerId);
+        storagePanel = new StoragePanel(font, menu.containerId, this::onClose);
         addWidget(storagePanel.searchBox());
 
         compassButton = addRenderableWidget(new WorkbenchIconButton(
                 0,
                 0,
-                new ItemStack(Items.COMPASS),
+                WorkbenchTextures.COMPASS_ICON,
                 Component.translatable("gui.craftandfind.open_storage"),
+                () -> storagePanel != null && storagePanel.isOpen(),
                 this::toggleStoragePanel
         ));
         customRecipeButton = addRenderableWidget(new WorkbenchIconButton(
                 0,
                 0,
-                new ItemStack(Items.KNOWLEDGE_BOOK),
+                WorkbenchTextures.RECIPE_BOOK_ICON,
                 Component.translatable("gui.craftandfind.open_recipes"),
+                () -> getRecipeBookComponent().isVisible(),
                 this::toggleRecipeBook
         ));
         updateCustomPositions();
+    }
+
+    @Override
+    protected void renderBg(GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
+        // The panel, every slot type and the crafting arrow are separate files.
+        // Artists can replace one piece without repainting the whole screen.
+        blitPart(
+                graphics,
+                WorkbenchTextures.MAIN_PANEL,
+                leftPos,
+                topPos,
+                imageWidth,
+                imageHeight
+        );
+
+        blitPart(
+                graphics,
+                WorkbenchTextures.CRAFTING_ARROW,
+                leftPos + WorkbenchLayout.CRAFTING_ARROW_X,
+                topPos + WorkbenchLayout.CRAFTING_ARROW_Y,
+                WorkbenchLayout.CRAFTING_ARROW_WIDTH,
+                WorkbenchLayout.CRAFTING_ARROW_HEIGHT
+        );
+
+        for (int slotIndex = 0; slotIndex < menu.slots.size(); slotIndex++) {
+            Slot slot = menu.slots.get(slotIndex);
+            if (slotIndex == 0) {
+                blitPart(
+                        graphics,
+                        WorkbenchTextures.RESULT_SLOT,
+                        leftPos + slot.x
+                                - WorkbenchLayout.RESULT_SLOT_OFFSET
+                                + WorkbenchLayout.RESULT_SLOT_X_ADJUST,
+                        topPos + slot.y
+                                - WorkbenchLayout.RESULT_SLOT_OFFSET
+                                + WorkbenchLayout.RESULT_SLOT_Y_ADJUST,
+                        WorkbenchLayout.RESULT_SLOT_SIZE,
+                        WorkbenchLayout.RESULT_SLOT_SIZE
+                );
+                continue;
+            }
+
+            ResourceLocation slotTexture = slotIndex <= 9
+                    ? WorkbenchTextures.CRAFTING_SLOT
+                    : WorkbenchTextures.INVENTORY_SLOT;
+            blitPart(
+                    graphics,
+                    slotTexture,
+                    leftPos + slot.x - WorkbenchLayout.NORMAL_SLOT_OFFSET,
+                    topPos + slot.y - WorkbenchLayout.NORMAL_SLOT_OFFSET,
+                    WorkbenchLayout.NORMAL_SLOT_SIZE,
+                    WorkbenchLayout.NORMAL_SLOT_SIZE
+            );
+        }
+    }
+
+    private static void blitPart(
+            GuiGraphics graphics,
+            ResourceLocation texture,
+            int x,
+            int y,
+            int width,
+            int height
+    ) {
+        graphics.blit(texture, x, y, 0, 0, width, height, width, height);
     }
 
     @Override
@@ -104,16 +175,12 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Escape always closes the whole workbench, regardless of the open side tab.
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             onClose();
             return true;
         }
 
-        if (storagePanel.isOpen()) {
-            // Keep keyboard input inside the storage search. This also prevents the
-            // inventory key (E) from closing the workbench while a query is typed.
-            storagePanel.searchBox().setFocused(true);
+        if (storagePanel.isOpen() && storagePanel.searchBox().isFocused()) {
             storagePanel.searchBox().keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
@@ -139,10 +206,19 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
             storagePanel.onStorageUpdated();
         }
 
-        // If the recipe book is already open, force its stacked-content cache to
-        // rebuild immediately with the new nearby-storage snapshot.
         getRecipeBookComponent().slotClicked(menu.getSlot(1));
         recipesUpdated();
+    }
+
+    /** Draws the ingredient layout for an unavailable recipe, like vanilla. */
+    public void showGhostRecipe(ResourceLocation recipeId) {
+        if (minecraft == null || minecraft.level == null) {
+            return;
+        }
+
+        minecraft.level.getRecipeManager().byKey(recipeId).ifPresent(recipe ->
+                getRecipeBookComponent().setupGhostRecipe(recipe, menu.slots)
+        );
     }
 
     private void toggleStoragePanel() {
@@ -182,15 +258,11 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
             leftPos = (width - imageWidth) / 2 + 77;
         }
 
-        // Raise the pair compared with the previous build and keep an exact 3 px gap.
-        int compassY = topPos + 27;
-        int recipeY = compassY + 21;
-        int buttonX = leftPos + 5;
-
+        int buttonX = leftPos + WorkbenchLayout.TAB_BUTTON_X;
         compassButton.setX(buttonX);
-        compassButton.setY(compassY);
+        compassButton.setY(topPos + WorkbenchLayout.TAB_COMPASS_Y);
         customRecipeButton.setX(buttonX);
-        customRecipeButton.setY(recipeY);
+        customRecipeButton.setY(topPos + WorkbenchLayout.TAB_RECIPE_Y);
         storagePanel.updatePosition(leftPos, width, height);
     }
 }

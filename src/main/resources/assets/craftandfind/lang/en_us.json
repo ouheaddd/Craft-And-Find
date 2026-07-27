@@ -4,5 +4,7 @@
   "gui.craftandfind.open_storage": "Nearby storage",
   "gui.craftandfind.open_recipes": "Recipe book",
   "gui.craftandfind.search": "Search...",
-  "gui.craftandfind.no_items": "No nearby items"
+  "gui.craftandfind.no_items": "No nearby items",
+  "gui.craftandfind.sort_quantity": "Sort by quantity",
+  "gui.craftandfind.sort_alphabetical": "Sort alphabetically"
 }

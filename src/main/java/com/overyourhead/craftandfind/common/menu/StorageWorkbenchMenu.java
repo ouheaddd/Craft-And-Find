@@ -1,17 +1,20 @@
 package com.overyourhead.craftandfind.common.menu;
 
 import com.overyourhead.craftandfind.CraftAndFindMod;
+import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
 import com.overyourhead.craftandfind.common.recipe.NearbyServerPlaceRecipe;
 import com.overyourhead.craftandfind.common.storage.NearbyStorage;
 import com.overyourhead.craftandfind.core.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.StackedContents;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
@@ -42,6 +45,28 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
                 ? NearbyStorage.empty(workbenchPos)
                 : NearbyStorage.scan(level, workbenchPos, CraftAndFindMod.STORAGE_RADIUS);
         this.snapshotTicker = SNAPSHOT_INTERVAL_TICKS;
+
+        if (serverPlayer != null) {
+            PersistentCraftingGrid.load(serverPlayer, workbenchPos, this);
+        }
+    }
+
+    @Override
+    public void slotsChanged(Container container) {
+        super.slotsChanged(container);
+        if (serverPlayer != null) {
+            PersistentCraftingGrid.save(serverPlayer, workbenchPos, this);
+        }
+    }
+
+    @Override
+    public void removed(Player player) {
+        if (player instanceof ServerPlayer closingPlayer) {
+            PersistentCraftingGrid.save(closingPlayer, workbenchPos, this);
+        }
+
+        // CraftingMenu#removed normally returns the grid to the player. The
+        // storage workbench intentionally keeps it laid out for the next open.
     }
 
     @Override
@@ -62,9 +87,19 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         if (recipe.value() instanceof CraftingRecipe) {
             @SuppressWarnings("unchecked")
             RecipeHolder<CraftingRecipe> craftingRecipe = (RecipeHolder<CraftingRecipe>) recipe;
+
+            refreshStorage();
+            if (!canCraftFromInventoryAndStorage(player, craftingRecipe)) {
+                PacketDistributor.sendToPlayer(
+                        player,
+                        new GhostRecipePayload(containerId, craftingRecipe.id())
+                );
+                return;
+            }
+
             beginPlacingRecipe();
             try {
-                new NearbyServerPlaceRecipe(this, refreshStorage()).recipeClicked(player, craftingRecipe, placeAll);
+                new NearbyServerPlaceRecipe(this, cachedStorage).recipeClicked(player, craftingRecipe, placeAll);
             } finally {
                 finishPlacingRecipe(craftingRecipe);
             }
@@ -73,6 +108,19 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         }
 
         super.handlePlacement(placeAll, recipe, player);
+    }
+
+
+    private boolean canCraftFromInventoryAndStorage(
+            ServerPlayer player,
+            RecipeHolder<CraftingRecipe> recipe
+    ) {
+        StackedContents contents = new StackedContents();
+        for (ItemStack stack : player.getInventory().items) {
+            contents.accountStack(stack);
+        }
+        fillCraftSlotsStackedContents(contents);
+        return contents.canCraft(recipe.value(), null);
     }
 
     @Override

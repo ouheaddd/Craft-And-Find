@@ -4,5 +4,7 @@
   "gui.craftandfind.open_storage": "Предметы рядом",
   "gui.craftandfind.open_recipes": "Книга рецептов",
   "gui.craftandfind.search": "Поиск...",
-  "gui.craftandfind.no_items": "Рядом нет предметов"
+  "gui.craftandfind.no_items": "Рядом нет предметов",
+  "gui.craftandfind.sort_quantity": "Сортировать по количеству",
+  "gui.craftandfind.sort_alphabetical": "Сортировать по алфавиту"
 }
