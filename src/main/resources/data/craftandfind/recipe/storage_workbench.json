@@ -2,19 +2,25 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "pattern": [
-    " C ",
-    "WTW",
-    "WWW"
+    "LCL",
+    "HTH",
+    "LBL"
   ],
   "key": {
+    "L": {
+      "item": "minecraft:dark_oak_wood"
+    },
     "C": {
       "item": "minecraft:compass"
+    },
+    "H": {
+      "item": "minecraft:chest"
     },
     "T": {
       "item": "minecraft:crafting_table"
     },
-    "W": {
-      "tag": "minecraft:planks"
+    "B": {
+      "item": "minecraft:writable_book"
     }
   },
   "result": {

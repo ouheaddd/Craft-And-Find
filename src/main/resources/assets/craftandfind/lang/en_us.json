@@ -6,5 +6,7 @@
   "gui.craftandfind.search": "Search...",
   "gui.craftandfind.no_items": "No nearby items",
   "gui.craftandfind.sort_quantity": "Sort by quantity",
-  "gui.craftandfind.sort_alphabetical": "Sort alphabetically"
+  "gui.craftandfind.sort_alphabetical": "Sort alphabetically",
+  "advancements.craftandfind.a_better_workbench.title": "A Better Workbench",
+  "advancements.craftandfind.a_better_workbench.description": "Upgrade the crafting table into something greater."
 }

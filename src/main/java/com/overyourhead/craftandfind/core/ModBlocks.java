@@ -4,6 +4,7 @@ import com.overyourhead.craftandfind.CraftAndFindMod;
 import com.overyourhead.craftandfind.common.block.StorageWorkbenchBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.material.PushReaction;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -14,6 +15,8 @@ public final class ModBlocks {
             "storage_workbench",
             StorageWorkbenchBlock::new,
             BlockBehaviour.Properties.ofFullCopy(Blocks.CRAFTING_TABLE)
+                    .noOcclusion()
+                    .pushReaction(PushReaction.BLOCK)
     );
 
     private ModBlocks() {

@@ -1,7 +1,6 @@
 package com.overyourhead.craftandfind.common.menu;
 
 import com.overyourhead.craftandfind.CraftAndFindMod;
-import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
 import com.overyourhead.craftandfind.common.recipe.NearbyServerPlaceRecipe;
 import com.overyourhead.craftandfind.common.storage.NearbyStorage;
@@ -14,7 +13,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.StackedContents;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
@@ -88,18 +86,10 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
             @SuppressWarnings("unchecked")
             RecipeHolder<CraftingRecipe> craftingRecipe = (RecipeHolder<CraftingRecipe>) recipe;
 
-            refreshStorage();
-            if (!canCraftFromInventoryAndStorage(player, craftingRecipe)) {
-                PacketDistributor.sendToPlayer(
-                        player,
-                        new GhostRecipePayload(containerId, craftingRecipe.id())
-                );
-                return;
-            }
-
             beginPlacingRecipe();
             try {
-                new NearbyServerPlaceRecipe(this, cachedStorage).recipeClicked(player, craftingRecipe, placeAll);
+                new NearbyServerPlaceRecipe(this, refreshStorage())
+                        .recipeClicked(player, craftingRecipe, placeAll);
             } finally {
                 finishPlacingRecipe(craftingRecipe);
             }
@@ -110,18 +100,6 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         super.handlePlacement(placeAll, recipe, player);
     }
 
-
-    private boolean canCraftFromInventoryAndStorage(
-            ServerPlayer player,
-            RecipeHolder<CraftingRecipe> recipe
-    ) {
-        StackedContents contents = new StackedContents();
-        for (ItemStack stack : player.getInventory().items) {
-            contents.accountStack(stack);
-        }
-        fillCraftSlotsStackedContents(contents);
-        return contents.canCraft(recipe.value(), null);
-    }
 
     @Override
     public void broadcastChanges() {

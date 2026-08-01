@@ -6,5 +6,7 @@
   "gui.craftandfind.search": "Поиск...",
   "gui.craftandfind.no_items": "Рядом нет предметов",
   "gui.craftandfind.sort_quantity": "Сортировать по количеству",
-  "gui.craftandfind.sort_alphabetical": "Сортировать по алфавиту"
+  "gui.craftandfind.sort_alphabetical": "Сортировать по алфавиту",
+  "advancements.craftandfind.a_better_workbench.title": "Верстак получше",
+  "advancements.craftandfind.a_better_workbench.description": "Превратите обычный верстак во что-то большее."
 }
