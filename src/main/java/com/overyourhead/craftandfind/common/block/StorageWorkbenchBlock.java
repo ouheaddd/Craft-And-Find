@@ -1,9 +1,11 @@
 package com.overyourhead.craftandfind.common.block;
 
+import com.overyourhead.craftandfind.common.menu.PersistentCraftingGrid;
 import com.overyourhead.craftandfind.common.menu.StorageWorkbenchMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.LivingEntity;
@@ -110,6 +112,8 @@ public final class StorageWorkbenchBlock extends CraftingTableBlock {
             return;
         }
 
+        PersistentCraftingGrid.beginNewWorkbench((ServerLevel) level, pos);
+
         Direction facing = state.getValue(FACING);
         BlockPos sidePos = sidePos(pos, facing);
 
@@ -159,6 +163,7 @@ public final class StorageWorkbenchBlock extends CraftingTableBlock {
             BlockPos mainPos = mainPos(pos, state);
 
             if (part == StorageWorkbenchPart.LOWER_MAIN) {
+                PersistentCraftingGrid.invalidate((ServerLevel) level, mainPos);
                 removeOtherParts(level, mainPos, facing);
             } else {
                 BlockState mainState = level.getBlockState(mainPos);

@@ -1,10 +1,14 @@
 package com.overyourhead.craftandfind;
 
+import com.overyourhead.craftandfind.common.event.CommonEvents;
 import com.overyourhead.craftandfind.common.network.CraftAndFindNetwork;
 import com.overyourhead.craftandfind.core.ModBlocks;
 import com.overyourhead.craftandfind.core.ModItems;
+import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.fml.common.Mod;
@@ -19,6 +23,7 @@ public final class CraftAndFindMod {
         ModItems.ITEMS.register(modBus);
         modBus.addListener(this::registerPayloads);
         modBus.addListener(this::addCreativeTabContents);
+        NeoForge.EVENT_BUS.addListener(CommonEvents::onPlayerClone);
     }
 
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
@@ -27,7 +32,11 @@ public final class CraftAndFindMod {
 
     private void addCreativeTabContents(BuildCreativeModeTabContentsEvent event) {
         if (CreativeModeTabs.FUNCTIONAL_BLOCKS.equals(event.getTabKey())) {
-            event.accept(ModItems.STORAGE_WORKBENCH_ITEM.get());
+            event.insertAfter(
+                    Blocks.ENCHANTING_TABLE.asItem().getDefaultInstance(),
+                    ModItems.STORAGE_WORKBENCH_ITEM.get().getDefaultInstance(),
+                    CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS
+            );
         }
     }
 }

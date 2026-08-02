@@ -59,8 +59,11 @@ public final class CraftAndFindNetwork {
             return;
         }
 
-        var positions = menu.refreshStorage().positionsContaining(payload.stack());
-        PacketDistributor.sendToPlayer(player, new HighlightPositionsPayload(positions));
+        var targets = menu.refreshStorage().highlightTargets(payload.stack(), player.position());
+        PacketDistributor.sendToPlayer(
+                player,
+                new HighlightPositionsPayload(payload.stack(), targets)
+        );
     }
 
     private static void ignoreStorageSnapshot(StorageSnapshotPayload payload, IPayloadContext context) {

@@ -5,6 +5,7 @@ import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
 import com.overyourhead.craftandfind.common.recipe.NearbyServerPlaceRecipe;
 import com.overyourhead.craftandfind.common.storage.NearbyStorage;
+import com.overyourhead.craftandfind.common.storage.StorageItemEntry;
 import com.overyourhead.craftandfind.core.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,20 +15,27 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.StackedContents;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.List;
+
 public final class StorageWorkbenchMenu extends CraftingMenu {
     private static final int SNAPSHOT_INTERVAL_TICKS = 20;
+    private static final int CONTAINER_SCAN_INTERVAL_TICKS = 100;
 
     private final ContainerLevelAccess workbenchAccess;
     private final BlockPos workbenchPos;
     private final Level level;
     private final ServerPlayer serverPlayer;
     private NearbyStorage cachedStorage;
+    private List<StorageItemEntry> lastSentSnapshot = List.of();
     private int snapshotTicker;
+    private int containerScanTicker;
+    private boolean hasSentSnapshot;
 
     public StorageWorkbenchMenu(
             int containerId,
@@ -44,6 +52,7 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
                 ? NearbyStorage.empty(workbenchPos)
                 : NearbyStorage.scan(level, workbenchPos, CraftAndFindMod.STORAGE_RADIUS);
         this.snapshotTicker = SNAPSHOT_INTERVAL_TICKS;
+        this.containerScanTicker = 0;
 
         if (serverPlayer != null) {
             PersistentCraftingGrid.load(serverPlayer, workbenchPos, this);
@@ -93,6 +102,7 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
                         player,
                         new GhostRecipePayload(containerId, craftingRecipe.id())
                 );
+                sendSnapshot();
                 return;
             }
 
@@ -122,7 +132,6 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         return contents.canCraft(recipe.value(), null);
     }
 
-
     @Override
     public void broadcastChanges() {
         super.broadcastChanges();
@@ -130,17 +139,23 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
             return;
         }
 
+        containerScanTicker++;
+        if (containerScanTicker >= CONTAINER_SCAN_INTERVAL_TICKS) {
+            refreshStorage();
+        }
+
         snapshotTicker++;
         if (snapshotTicker >= SNAPSHOT_INTERVAL_TICKS) {
             snapshotTicker = 0;
-            refreshStorage();
             sendSnapshot();
         }
     }
 
+    /** Performs a full radius scan and starts a fresh five-second cache window. */
     public NearbyStorage refreshStorage() {
         if (serverPlayer != null) {
             cachedStorage = NearbyStorage.scan(level, workbenchPos, CraftAndFindMod.STORAGE_RADIUS);
+            containerScanTicker = 0;
         }
         return cachedStorage;
     }
@@ -153,12 +168,47 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         return workbenchPos;
     }
 
+    /** Sends only real storage changes, avoiding duplicate packets and client refreshes. */
     private void sendSnapshot() {
-        if (serverPlayer != null) {
-            PacketDistributor.sendToPlayer(
-                    serverPlayer,
-                    new StorageSnapshotPayload(containerId, cachedStorage.snapshot())
-            );
+        if (serverPlayer == null) {
+            return;
         }
+
+        List<StorageItemEntry> snapshot = cachedStorage.snapshot();
+        if (hasSentSnapshot && sameSnapshot(lastSentSnapshot, snapshot)) {
+            return;
+        }
+
+        PacketDistributor.sendToPlayer(
+                serverPlayer,
+                new StorageSnapshotPayload(containerId, snapshot)
+        );
+        lastSentSnapshot = snapshot;
+        hasSentSnapshot = true;
+    }
+
+    private static boolean sameSnapshot(
+            List<StorageItemEntry> first,
+            List<StorageItemEntry> second
+    ) {
+        if (first.size() != second.size()) {
+            return false;
+        }
+
+        for (int index = 0; index < first.size(); index++) {
+            StorageItemEntry firstEntry = first.get(index);
+            StorageItemEntry secondEntry = second.get(index);
+            if (firstEntry.count() != secondEntry.count()) {
+                return false;
+            }
+
+            ItemStack firstStack = firstEntry.stack();
+            ItemStack secondStack = secondEntry.stack();
+            if (!ItemStack.isSameItemSameComponents(firstStack, secondStack)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

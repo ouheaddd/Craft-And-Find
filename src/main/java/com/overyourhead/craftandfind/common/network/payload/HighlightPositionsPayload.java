@@ -1,17 +1,23 @@
 package com.overyourhead.craftandfind.common.network.payload;
 
 import com.overyourhead.craftandfind.CraftAndFindMod;
-import net.minecraft.core.BlockPos;
+import com.overyourhead.craftandfind.common.storage.StorageHighlightTarget;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-public record HighlightPositionsPayload(List<BlockPos> positions) implements CustomPacketPayload {
-    private static final int MAX_POSITIONS = 512;
+public record HighlightPositionsPayload(
+        ItemStack stack,
+        List<StorageHighlightTarget> targets
+) implements CustomPacketPayload {
+    private static final int MAX_TARGETS = 512;
 
     public static final Type<HighlightPositionsPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(CraftAndFindMod.MOD_ID, "highlight_positions")
@@ -19,24 +25,43 @@ public record HighlightPositionsPayload(List<BlockPos> positions) implements Cus
 
     public static final StreamCodec<RegistryFriendlyByteBuf, HighlightPositionsPayload> STREAM_CODEC = StreamCodec.of(
             (buffer, payload) -> {
-                int size = Math.min(payload.positions().size(), MAX_POSITIONS);
+                ItemStack.OPTIONAL_STREAM_CODEC.encode(buffer, payload.stack().copyWithCount(1));
+
+                int size = Math.min(payload.targets().size(), MAX_TARGETS);
                 buffer.writeVarInt(size);
                 for (int index = 0; index < size; index++) {
-                    buffer.writeBlockPos(payload.positions().get(index));
+                    StorageHighlightTarget target = payload.targets().get(index);
+                    buffer.writeBlockPos(target.pos());
+                    buffer.writeVarInt(target.count());
                 }
             },
             buffer -> {
-                int size = readBoundedSize(buffer, MAX_POSITIONS, "highlight positions");
-                List<BlockPos> positions = new ArrayList<>(size);
+                ItemStack stack = ItemStack.OPTIONAL_STREAM_CODEC.decode(buffer).copyWithCount(1);
+                int size = readBoundedSize(buffer, MAX_TARGETS, "highlight targets");
+                List<StorageHighlightTarget> targets = new ArrayList<>(size);
                 for (int index = 0; index < size; index++) {
-                    positions.add(buffer.readBlockPos());
+                    var pos = buffer.readBlockPos();
+                    int count = buffer.readVarInt();
+                    if (count < 0) {
+                        throw new IllegalArgumentException("Invalid highlight item count: " + count);
+                    }
+                    targets.add(new StorageHighlightTarget(pos, count));
                 }
-                return new HighlightPositionsPayload(positions);
+                return new HighlightPositionsPayload(stack, targets);
             }
     );
 
     public HighlightPositionsPayload {
-        positions = positions.stream().map(BlockPos::immutable).distinct().limit(MAX_POSITIONS).toList();
+        stack = stack.copyWithCount(1);
+
+        Map<Long, StorageHighlightTarget> unique = new LinkedHashMap<>();
+        for (StorageHighlightTarget target : targets) {
+            if (target.count() <= 0 || unique.size() >= MAX_TARGETS) {
+                continue;
+            }
+            unique.putIfAbsent(target.pos().asLong(), target);
+        }
+        targets = List.copyOf(unique.values());
     }
 
     private static int readBoundedSize(RegistryFriendlyByteBuf buffer, int maximum, String valueName) {

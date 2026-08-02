@@ -7,31 +7,40 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * A short-lived view of all loaded container slots inside the workbench radius.
- * The scan never stores items itself; it only reads or moves stacks from the
- * original block containers on the logical server.
+ * A cached view of loaded container positions inside the workbench radius.
+ * Items are never stored here: every operation resolves the current block
+ * entity and reads or moves stacks in the original container.
  */
 public final class NearbyStorage {
+    private final Level level;
     private final BlockPos origin;
-    private final List<SlotReference> slots;
+    private final List<ContainerReference> containers;
 
-    private NearbyStorage(BlockPos origin, List<SlotReference> slots) {
+    private NearbyStorage(Level level, BlockPos origin, List<ContainerReference> containers) {
+        this.level = level;
         this.origin = origin.immutable();
-        this.slots = List.copyOf(slots);
+        this.containers = List.copyOf(containers);
     }
 
     public static NearbyStorage empty(BlockPos origin) {
-        return new NearbyStorage(origin, List.of());
+        return new NearbyStorage(null, origin, List.of());
     }
 
+    /**
+     * Performs the relatively expensive radius scan. Only container positions
+     * are cached, so slot contents can still change immediately between scans.
+     */
     public static NearbyStorage scan(Level level, BlockPos origin, int radius) {
-        List<SlotReference> found = new ArrayList<>();
+        List<ContainerReference> found = new ArrayList<>();
         BlockPos min = origin.offset(-radius, -radius, -radius);
         BlockPos max = origin.offset(radius, radius, radius);
         double radiusSquared = (double) radius * radius;
@@ -45,31 +54,23 @@ public final class NearbyStorage {
             }
 
             BlockEntity blockEntity = level.getBlockEntity(pos);
-            if (!(blockEntity instanceof Container container)) {
-                continue;
-            }
-
-            int distanceSquared = (int) pos.distSqr(origin);
-            for (int slot = 0; slot < container.getContainerSize(); slot++) {
-                ItemStack stack = container.getItem(slot);
-                if (!stack.isEmpty()) {
-                    found.add(new SlotReference(pos, container, slot, distanceSquared));
-                }
+            if (blockEntity instanceof Container) {
+                found.add(new ContainerReference(pos, (int) pos.distSqr(origin)));
             }
         }
 
-        return new NearbyStorage(origin, found);
+        return new NearbyStorage(level, origin, found);
     }
 
     /**
-     * Builds the item list shown in the compass panel. Item components are part
+     * Builds the item list shown in the storage panel. Item components are part
      * of identity, so differently enchanted or otherwise component-bearing
      * stacks remain separate entries.
      */
     public List<StorageItemEntry> snapshot() {
         List<MutableEntry> totals = new ArrayList<>();
 
-        for (SlotReference reference : slots) {
+        for (SlotReference reference : currentSlots()) {
             ItemStack stack = reference.currentStack();
             if (stack.isEmpty()) {
                 continue;
@@ -102,7 +103,7 @@ public final class NearbyStorage {
 
     /** Adds nearby storage stacks to vanilla's recipe availability counter. */
     public void account(StackedContents contents) {
-        for (SlotReference reference : slots) {
+        for (SlotReference reference : currentSlots()) {
             ItemStack stack = reference.currentStack();
             if (!stack.isEmpty()) {
                 contents.accountStack(stack, stack.getCount());
@@ -120,7 +121,7 @@ public final class NearbyStorage {
             return 0;
         }
 
-        List<SlotReference> candidates = slots.stream()
+        List<SlotReference> candidates = currentSlots().stream()
                 .filter(reference -> {
                     ItemStack stack = reference.currentStack();
                     return !stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, wanted);
@@ -176,22 +177,72 @@ public final class NearbyStorage {
         return remaining;
     }
 
-    public List<BlockPos> positionsContaining(ItemStack wanted) {
+    /**
+     * Returns every container holding the selected stack, together with its
+     * exact amount. The container with the largest amount is first; equal
+     * amounts are resolved by distance to the requesting player.
+     */
+    public List<StorageHighlightTarget> highlightTargets(ItemStack wanted, Vec3 observerPosition) {
         if (wanted.isEmpty()) {
             return List.of();
         }
 
-        return slots.stream()
-                .filter(reference -> {
-                    ItemStack stack = reference.currentStack();
-                    return !stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, wanted);
-                })
-                .map(SlotReference::pos)
-                .distinct()
+        Map<BlockPos, Integer> amounts = new HashMap<>();
+        for (SlotReference reference : currentSlots()) {
+            ItemStack stack = reference.currentStack();
+            if (stack.isEmpty() || !ItemStack.isSameItemSameComponents(stack, wanted)) {
+                continue;
+            }
+
+            amounts.merge(reference.pos(), stack.getCount(), NearbyStorage::saturatedAdd);
+        }
+
+        return amounts.entrySet().stream()
+                .map(entry -> new StorageHighlightTarget(entry.getKey(), entry.getValue()))
                 .sorted(Comparator
-                        .comparingDouble((BlockPos pos) -> pos.distSqr(origin))
-                        .thenComparingLong(BlockPos::asLong))
+                        .comparingInt(StorageHighlightTarget::count)
+                        .reversed()
+                        .thenComparingDouble(target -> distanceSquared(target.pos(), observerPosition))
+                        .thenComparingLong(target -> target.pos().asLong()))
                 .toList();
+    }
+
+    private static double distanceSquared(BlockPos pos, Vec3 observerPosition) {
+        double x = pos.getX() + 0.5D - observerPosition.x;
+        double y = pos.getY() + 0.5D - observerPosition.y;
+        double z = pos.getZ() + 0.5D - observerPosition.z;
+        return x * x + y * y + z * z;
+    }
+
+    /**
+     * Resolves cached positions against the live world. Removed or unloaded
+     * containers disappear immediately, while newly filled slots are visible
+     * without waiting for the next radius scan.
+     */
+    private List<SlotReference> currentSlots() {
+        if (level == null || containers.isEmpty()) {
+            return List.of();
+        }
+
+        List<SlotReference> result = new ArrayList<>();
+        for (ContainerReference reference : containers) {
+            Container container = reference.currentContainer(level);
+            if (container == null) {
+                continue;
+            }
+
+            for (int slot = 0; slot < container.getContainerSize(); slot++) {
+                if (!container.getItem(slot).isEmpty()) {
+                    result.add(new SlotReference(
+                            reference.pos(),
+                            container,
+                            slot,
+                            reference.distanceSquared()
+                    ));
+                }
+            }
+        }
+        return result;
     }
 
     private static boolean isStartedStack(ItemStack stack) {
@@ -201,6 +252,16 @@ public final class NearbyStorage {
     private static int saturatedAdd(int first, int second) {
         long result = (long) first + second;
         return result > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) result;
+    }
+
+    private record ContainerReference(BlockPos pos, int distanceSquared) {
+        Container currentContainer(Level level) {
+            if (!level.hasChunkAt(pos)) {
+                return null;
+            }
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+            return blockEntity instanceof Container container ? container : null;
+        }
     }
 
     private record SlotReference(BlockPos pos, Container container, int slot, int distanceSquared) {

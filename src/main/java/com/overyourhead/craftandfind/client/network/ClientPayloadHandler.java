@@ -40,7 +40,7 @@ public final class ClientPayloadHandler {
     }
 
     public static void handleHighlightPositions(HighlightPositionsPayload payload, IPayloadContext context) {
-        StorageHighlightRenderer.show(payload.positions());
+        StorageHighlightRenderer.show(payload.stack(), payload.targets());
     }
 
     public static void handleGhostRecipe(GhostRecipePayload payload, IPayloadContext context) {
