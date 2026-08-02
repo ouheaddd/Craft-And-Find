@@ -16,11 +16,14 @@ import net.minecraft.world.inventory.Slot;
 import org.lwjgl.glfw.GLFW;
 
 public final class StorageWorkbenchScreen extends CraftingScreen {
+    private static boolean rememberedRecipeTabActive;
+
     private StoragePanel storagePanel;
     private WorkbenchIconButton compassButton;
     private WorkbenchIconButton customRecipeButton;
     private ImageButton vanillaRecipeBookButton;
     private boolean resultSlotShiftApplied;
+    private boolean recipeTabActive = rememberedRecipeTabActive;
 
     public StorageWorkbenchScreen(CraftingMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -63,7 +66,7 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
                 () -> getRecipeBookComponent().isVisible(),
                 this::toggleRecipeBook
         ));
-        updateCustomPositions();
+        applyActiveTabState();
     }
 
     @Override
@@ -118,6 +121,26 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
                     WorkbenchLayout.NORMAL_SLOT_SIZE
             );
         }
+    }
+
+    @Override
+    protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
+        graphics.drawString(
+                font,
+                title,
+                titleLabelX + WorkbenchLayout.CRAFTING_LABEL_X_OFFSET,
+                titleLabelY,
+                WorkbenchLayout.LABEL_COLOR,
+                true
+        );
+        graphics.drawString(
+                font,
+                playerInventoryTitle,
+                inventoryLabelX,
+                inventoryLabelY,
+                WorkbenchLayout.LABEL_COLOR,
+                true
+        );
     }
 
     private static void blitPart(
@@ -209,7 +232,9 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
             storagePanel.onStorageUpdated();
         }
 
-        getRecipeBookComponent().slotClicked(menu.getSlot(1));
+        // ClientPayloadHandler marks the player inventory changed, so the
+        // recipe book rebuilds its stacked contents on the next client tick.
+        // Calling slotClicked here also clears the active ghost recipe.
         recipesUpdated();
     }
 
@@ -225,31 +250,60 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
     }
 
     private void toggleStoragePanel() {
-        if (!storagePanel.isOpen() && getRecipeBookComponent().isVisible()) {
-            getRecipeBookComponent().toggleVisibility();
+        if (!recipeTabActive && storagePanel.isOpen()) {
+            return;
         }
-        storagePanel.toggle();
-        if (storagePanel.isOpen() && width >= 379) {
-            leftPos = (width - imageWidth) / 2 + 77;
-        } else {
-            resetMainPosition();
-        }
-        updateCustomPositions();
+
+        recipeTabActive = false;
+        rememberedRecipeTabActive = false;
+        applyActiveTabState();
     }
 
     private void toggleRecipeBook() {
-        if (storagePanel.isOpen()) {
-            storagePanel.setOpen(false);
+        if (recipeTabActive && getRecipeBookComponent().isVisible()) {
+            return;
         }
-        getRecipeBookComponent().toggleVisibility();
-        resetMainPosition();
+
+        recipeTabActive = true;
+        rememberedRecipeTabActive = true;
+        applyActiveTabState();
+    }
+
+    private void applyActiveTabState() {
+        if (recipeTabActive) {
+            storagePanel.setOpen(false);
+            if (!getRecipeBookComponent().isVisible()) {
+                getRecipeBookComponent().toggleVisibility();
+            }
+            resetMainPosition();
+        } else {
+            if (getRecipeBookComponent().isVisible()) {
+                getRecipeBookComponent().toggleVisibility();
+            }
+            storagePanel.setOpen(true);
+            leftPos = width >= 379
+                    ? (width - imageWidth) / 2 + 77
+                    : (width - imageWidth) / 2;
+        }
+
         updateCustomPositions();
     }
 
     private void resetMainPosition() {
-        leftPos = getRecipeBookComponent().isVisible()
-                ? getRecipeBookComponent().updateScreenPosition(width, imageWidth)
-                : (width - imageWidth) / 2;
+        if (!getRecipeBookComponent().isVisible()) {
+            leftPos = (width - imageWidth) / 2;
+            return;
+        }
+
+        if (width < 379) {
+            leftPos = getRecipeBookComponent().updateScreenPosition(width, imageWidth);
+            return;
+        }
+
+        int recipePanelX = (width - WorkbenchLayout.PANEL_WIDTH) / 2 - 86;
+        leftPos = recipePanelX
+                + WorkbenchLayout.PANEL_WIDTH
+                + WorkbenchLayout.PANEL_GAP;
     }
 
     private void updateCustomPositions() {
@@ -259,6 +313,8 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
 
         if (storagePanel.isOpen() && width >= 379) {
             leftPos = (width - imageWidth) / 2 + 77;
+        } else if (recipeTabActive) {
+            resetMainPosition();
         }
 
         int buttonX = leftPos + WorkbenchLayout.TAB_BUTTON_X;

@@ -291,7 +291,7 @@ public final class StoragePanel {
     }
 
     private void renderCount(GuiGraphics graphics, StorageItemEntry entry, int itemX, int itemY) {
-        String text = entry.count() > 512 ? "512+" : Integer.toString(entry.count());
+        String text = entry.count() > 99_999 ? "99999+" : Integer.toString(entry.count());
         int textWidth = font.width(text);
         float scale = textWidth <= 16 ? 1.0F : 16.0F / textWidth;
 

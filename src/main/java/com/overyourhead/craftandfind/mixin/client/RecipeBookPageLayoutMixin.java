@@ -3,7 +3,6 @@ package com.overyourhead.craftandfind.mixin.client;
 import com.overyourhead.craftandfind.client.gui.StorageWorkbenchScreen;
 import com.overyourhead.craftandfind.client.gui.workbench.WorkbenchLayout;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookPage;
@@ -12,7 +11,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.lang.reflect.Field;
@@ -53,34 +52,19 @@ public abstract class RecipeBookPageLayoutMixin {
         craftandfind$applyLayout();
     }
 
-    @Redirect(
+    @ModifyArg(
             method = "render",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/gui/GuiGraphics;drawString(Lnet/minecraft/client/gui/Font;Ljava/lang/String;IIIZ)I"
+                    target = "Lnet/minecraft/client/gui/GuiGraphics;drawString(Lnet/minecraft/client/gui/Font;Lnet/minecraft/network/chat/Component;IIIZ)I"
             ),
+            index = 3,
             require = 0
     )
-    private int craftandfind$movePageLabel(
-            GuiGraphics graphics,
-            Font font,
-            String text,
-            int x,
-            int y,
-            int color,
-            boolean shadow
-    ) {
-        if (craftandfind$ownScreen()) {
-            return graphics.drawString(
-                    font,
-                    text,
-                    x,
-                    y + WorkbenchLayout.RECIPE_BOOK_PAGE_TEXT_Y_OFFSET,
-                    color,
-                    shadow
-            );
-        }
-        return graphics.drawString(font, text, x, y, color, shadow);
+    private int craftandfind$movePageLabelDown(int y) {
+        return craftandfind$ownScreen()
+                ? y + WorkbenchLayout.RECIPE_BOOK_PAGE_TEXT_Y_OFFSET
+                : y;
     }
 
     @Unique

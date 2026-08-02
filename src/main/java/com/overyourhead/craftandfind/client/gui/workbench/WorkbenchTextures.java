@@ -58,6 +58,9 @@ public final class WorkbenchTextures {
 
 
     // GUI-atlas sprite IDs used by vanilla recipe widgets inside our screen.
+    public static final ResourceLocation RECIPE_FILTER_BUTTON_SPRITE = sprite("recipe_filter_button");
+    public static final ResourceLocation RECIPE_FILTER_BUTTON_HOVERED_SPRITE = sprite("recipe_filter_button_hovered");
+    public static final ResourceLocation RECIPE_FILTER_BUTTON_SELECTED_SPRITE = sprite("recipe_filter_button_selected");
     public static final ResourceLocation RECIPE_SLOT_AVAILABLE_SPRITE = sprite("recipe_slot_available");
     public static final ResourceLocation RECIPE_SLOT_UNAVAILABLE_SPRITE = sprite("recipe_slot_unavailable");
     public static final ResourceLocation RECIPE_SLOT_MANY_AVAILABLE_SPRITE = sprite("recipe_slot_many_available");

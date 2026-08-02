@@ -9,7 +9,7 @@ public final class WorkbenchLayout {
     public static final int MAIN_HEIGHT = 166;
 
     public static final int CRAFTING_ARROW_X = 88;
-    public static final int CRAFTING_ARROW_Y = 35;
+    public static final int CRAFTING_ARROW_Y = 36;
     public static final int CRAFTING_ARROW_WIDTH = 22;
     public static final int CRAFTING_ARROW_HEIGHT = 15;
 
@@ -17,10 +17,10 @@ public final class WorkbenchLayout {
     public static final int RESULT_SLOT_SIZE = 26;
     public static final int NORMAL_SLOT_OFFSET = 1;
     public static final int RESULT_SLOT_OFFSET = 5;
-    public static final int RESULT_SLOT_Y_ADJUST = -2;
-    public static final int RESULT_SLOT_X_ADJUST = -1;
+    public static final int RESULT_SLOT_Y_ADJUST = 0;
+    public static final int RESULT_SLOT_X_ADJUST = 0;
     public static final int RESULT_SLOT_CONTENT_X_SHIFT = -1;
-    public static final int RESULT_SLOT_CONTENT_Y_SHIFT = -2;
+    public static final int RESULT_SLOT_CONTENT_Y_SHIFT = 0;
 
     public static final int PANEL_WIDTH = 147;
     public static final int PANEL_HEIGHT = 166;
@@ -58,14 +58,19 @@ public final class WorkbenchLayout {
     public static final int TAB_WIDTH = 20;
     public static final int TAB_HEIGHT = 18;
 
+    public static final int RECIPE_BOOK_ROW_X_OFFSET = 0;
     public static final int RECIPE_BOOK_SEARCH_SHIFT_X = 1;
     public static final int RECIPE_BOOK_SEARCH_SHIFT_Y = -2;
+    public static final int RECIPE_BOOK_SEARCH_TEXT_Y_OFFSET = 1;
     public static final int RECIPE_BOOK_FILTER_SHIFT_Y = -2;
     public static final int RECIPE_BOOK_ICON_X_FROM_SEARCH = -19;
     public static final int RECIPE_BOOK_ICON_Y_FROM_SEARCH = -1;
     public static final int RECIPE_BOOK_BUTTONS_Y_OFFSET = 3;
     public static final int RECIPE_BOOK_PAGE_CONTROLS_Y_OFFSET = 2;
-    public static final int RECIPE_BOOK_PAGE_TEXT_Y_OFFSET = 2;
+    public static final int RECIPE_BOOK_PAGE_TEXT_Y_OFFSET = 3;
+
+    public static final int CRAFTING_LABEL_X_OFFSET = 7;
+    public static final int LABEL_COLOR = 0xFFE6D5AC;
 
     private WorkbenchLayout() {
     }

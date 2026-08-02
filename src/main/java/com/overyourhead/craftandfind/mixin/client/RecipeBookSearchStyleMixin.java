@@ -7,7 +7,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.StateSwitchingButton;
+import net.minecraft.client.gui.components.WidgetSprites;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
+import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -17,8 +19,9 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Keeps the original recipe-book styling intact. Only the requested search-row
- * positioning and magnifying-glass alignment are changed.
+ * Aligns the recipe-book search row with the storage panel and applies the
+ * Craft & Find-owned search and filter textures. Recipe categories are not
+ * touched here.
  */
 @Mixin(RecipeBookComponent.class)
 public abstract class RecipeBookSearchStyleMixin {
@@ -26,39 +29,59 @@ public abstract class RecipeBookSearchStyleMixin {
     private EditBox searchBox;
 
     @Shadow
-    private StateSwitchingButton filterButton;
+    protected StateSwitchingButton filterButton;
+
+    @Shadow
+    private int xOffset;
+
+    @Shadow
+    private int width;
+
+    @Shadow
+    private int height;
 
     @Unique
-    private boolean craftandfind$searchRowCaptured;
-    @Unique
-    private int craftandfind$baseSearchX;
-    @Unique
-    private int craftandfind$baseSearchY;
-    @Unique
-    private int craftandfind$baseFilterX;
-    @Unique
-    private int craftandfind$baseFilterY;
+    private static final WidgetSprites CRAFTANDFIND$FILTER_SPRITES = new WidgetSprites(
+            WorkbenchTextures.RECIPE_FILTER_BUTTON_SELECTED_SPRITE,
+            WorkbenchTextures.RECIPE_FILTER_BUTTON_SPRITE,
+            WorkbenchTextures.RECIPE_FILTER_BUTTON_SELECTED_SPRITE,
+            WorkbenchTextures.RECIPE_FILTER_BUTTON_HOVERED_SPRITE
+    );
 
     @Inject(method = "render", at = @At("HEAD"))
-    private void craftandfind$positionSearchRow(
+    private void craftandfind$alignSearchRow(
             GuiGraphics graphics,
             int mouseX,
             int mouseY,
             float partialTick,
             CallbackInfo ci
     ) {
-        if (!craftandfind$ownScreen() || searchBox == null) {
+        if (!craftandfind$ownScreen() || searchBox == null || filterButton == null) {
             return;
         }
 
-        craftandfind$captureSearchRowIfNeeded();
-        searchBox.setX(craftandfind$baseSearchX + WorkbenchLayout.RECIPE_BOOK_SEARCH_SHIFT_X);
-        searchBox.setY(craftandfind$baseSearchY + WorkbenchLayout.RECIPE_BOOK_SEARCH_SHIFT_Y);
+        int panelY = craftandfind$panelY();
+        int rowX = craftandfind$rowX();
 
-        if (filterButton != null) {
-            filterButton.setX(craftandfind$baseFilterX);
-            filterButton.setY(craftandfind$baseFilterY + WorkbenchLayout.RECIPE_BOOK_FILTER_SHIFT_Y);
-        }
+        searchBox.setBordered(false);
+        searchBox.setX(rowX + WorkbenchLayout.SEARCH_TEXT_X);
+        searchBox.setY(
+                panelY
+                        + WorkbenchLayout.SEARCH_TEXT_Y
+                        + WorkbenchLayout.RECIPE_BOOK_SEARCH_TEXT_Y_OFFSET
+        );
+        searchBox.setSize(
+                WorkbenchLayout.SEARCH_TEXT_WIDTH,
+                WorkbenchLayout.SEARCH_TEXT_HEIGHT
+        );
+
+        filterButton.setX(rowX + WorkbenchLayout.SORT_BUTTON_X);
+        filterButton.setY(panelY + WorkbenchLayout.SORT_BUTTON_Y);
+        filterButton.setSize(
+                WorkbenchLayout.SORT_BUTTON_WIDTH,
+                WorkbenchLayout.SORT_BUTTON_HEIGHT
+        );
+        filterButton.initTextureValues(CRAFTANDFIND$FILTER_SPRITES);
     }
 
     @Redirect(
@@ -68,7 +91,7 @@ public abstract class RecipeBookSearchStyleMixin {
                     target = "Lnet/minecraft/client/gui/components/EditBox;render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V"
             )
     )
-    private void craftandfind$renderVanillaSearchWithMovedIcon(
+    private void craftandfind$renderThemedSearchBox(
             EditBox renderedSearchBox,
             GuiGraphics graphics,
             int mouseX,
@@ -80,10 +103,28 @@ public abstract class RecipeBookSearchStyleMixin {
             return;
         }
 
+        int panelY = craftandfind$panelY();
+        int rowX = craftandfind$rowX();
+        ResourceLocation background = renderedSearchBox.isFocused()
+                ? WorkbenchTextures.RECIPE_SEARCH_BOX_FOCUSED
+                : WorkbenchTextures.RECIPE_SEARCH_BOX;
+
+        graphics.blit(
+                background,
+                rowX + WorkbenchLayout.SEARCH_BACKGROUND_X,
+                panelY + WorkbenchLayout.SEARCH_BACKGROUND_Y,
+                0,
+                0,
+                WorkbenchLayout.SEARCH_BACKGROUND_WIDTH,
+                WorkbenchLayout.SEARCH_BACKGROUND_HEIGHT,
+                WorkbenchLayout.SEARCH_BACKGROUND_WIDTH,
+                WorkbenchLayout.SEARCH_BACKGROUND_HEIGHT
+        );
+
         graphics.blit(
                 WorkbenchTextures.SEARCH_ICON,
-                renderedSearchBox.getX() + WorkbenchLayout.RECIPE_BOOK_ICON_X_FROM_SEARCH,
-                renderedSearchBox.getY() + WorkbenchLayout.RECIPE_BOOK_ICON_Y_FROM_SEARCH,
+                rowX + WorkbenchLayout.SEARCH_ICON_X,
+                panelY + WorkbenchLayout.SEARCH_ICON_Y,
                 0,
                 0,
                 16,
@@ -91,33 +132,20 @@ public abstract class RecipeBookSearchStyleMixin {
                 16,
                 16
         );
+
         renderedSearchBox.render(graphics, mouseX, mouseY, partialTick);
     }
 
+
     @Unique
-    private void craftandfind$captureSearchRowIfNeeded() {
-        int expectedSearchX = craftandfind$baseSearchX + WorkbenchLayout.RECIPE_BOOK_SEARCH_SHIFT_X;
-        int expectedSearchY = craftandfind$baseSearchY + WorkbenchLayout.RECIPE_BOOK_SEARCH_SHIFT_Y;
-        int expectedFilterX = craftandfind$baseFilterX;
-        int expectedFilterY = craftandfind$baseFilterY + WorkbenchLayout.RECIPE_BOOK_FILTER_SHIFT_Y;
+    private int craftandfind$rowX() {
+        int panelX = (width - WorkbenchLayout.PANEL_WIDTH) / 2 - xOffset;
+        return panelX + WorkbenchLayout.RECIPE_BOOK_ROW_X_OFFSET;
+    }
 
-        boolean searchWasRepositionedByVanilla = !craftandfind$searchRowCaptured
-                || searchBox.getX() != expectedSearchX
-                || searchBox.getY() != expectedSearchY;
-        boolean filterWasRepositionedByVanilla = filterButton != null
-                && (filterButton.getX() != expectedFilterX || filterButton.getY() != expectedFilterY);
-
-        if (!searchWasRepositionedByVanilla && !filterWasRepositionedByVanilla) {
-            return;
-        }
-
-        craftandfind$baseSearchX = searchBox.getX();
-        craftandfind$baseSearchY = searchBox.getY();
-        if (filterButton != null) {
-            craftandfind$baseFilterX = filterButton.getX();
-            craftandfind$baseFilterY = filterButton.getY();
-        }
-        craftandfind$searchRowCaptured = true;
+    @Unique
+    private int craftandfind$panelY() {
+        return (height - WorkbenchLayout.PANEL_HEIGHT) / 2;
     }
 
     @Unique

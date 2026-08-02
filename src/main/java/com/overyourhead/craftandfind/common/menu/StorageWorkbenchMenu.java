@@ -1,6 +1,7 @@
 package com.overyourhead.craftandfind.common.menu;
 
 import com.overyourhead.craftandfind.CraftAndFindMod;
+import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
 import com.overyourhead.craftandfind.common.recipe.NearbyServerPlaceRecipe;
 import com.overyourhead.craftandfind.common.storage.NearbyStorage;
@@ -85,10 +86,19 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         if (recipe.value() instanceof CraftingRecipe) {
             @SuppressWarnings("unchecked")
             RecipeHolder<CraftingRecipe> craftingRecipe = (RecipeHolder<CraftingRecipe>) recipe;
+            NearbyStorage storage = refreshStorage();
+
+            if (!canCraft(player, craftingRecipe, storage)) {
+                PacketDistributor.sendToPlayer(
+                        player,
+                        new GhostRecipePayload(containerId, craftingRecipe.id())
+                );
+                return;
+            }
 
             beginPlacingRecipe();
             try {
-                new NearbyServerPlaceRecipe(this, refreshStorage())
+                new NearbyServerPlaceRecipe(this, storage)
                         .recipeClicked(player, craftingRecipe, placeAll);
             } finally {
                 finishPlacingRecipe(craftingRecipe);
@@ -98,6 +108,18 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         }
 
         super.handlePlacement(placeAll, recipe, player);
+    }
+
+    private boolean canCraft(
+            ServerPlayer player,
+            RecipeHolder<CraftingRecipe> recipe,
+            NearbyStorage storage
+    ) {
+        StackedContents contents = new StackedContents();
+        player.getInventory().fillStackedContents(contents);
+        super.fillCraftSlotsStackedContents(contents);
+        storage.account(contents);
+        return contents.canCraft(recipe.value(), null);
     }
 
 
