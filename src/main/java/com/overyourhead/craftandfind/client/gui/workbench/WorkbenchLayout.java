@@ -19,24 +19,26 @@ public final class WorkbenchLayout {
     public static final int RESULT_SLOT_OFFSET = 5;
     public static final int RESULT_SLOT_Y_ADJUST = -2;
     public static final int RESULT_SLOT_X_ADJUST = -1;
+    public static final int RESULT_SLOT_CONTENT_X_SHIFT = -1;
+    public static final int RESULT_SLOT_CONTENT_Y_SHIFT = -2;
 
     public static final int PANEL_WIDTH = 147;
     public static final int PANEL_HEIGHT = 166;
     public static final int PANEL_GAP = 2;
 
     public static final int SEARCH_BACKGROUND_X = 25;
-    public static final int SEARCH_BACKGROUND_Y = 11;
+    public static final int SEARCH_BACKGROUND_Y = 7;
     public static final int SEARCH_BACKGROUND_WIDTH = 87;
     public static final int SEARCH_BACKGROUND_HEIGHT = 18;
     public static final int SEARCH_TEXT_X = 30;
-    public static final int SEARCH_TEXT_Y = 15;
+    public static final int SEARCH_TEXT_Y = 11;
     public static final int SEARCH_TEXT_WIDTH = 77;
     public static final int SEARCH_TEXT_HEIGHT = 12;
-    public static final int SEARCH_ICON_X = 5;
-    public static final int SEARCH_ICON_Y = 12;
+    public static final int SEARCH_ICON_X = 7;
+    public static final int SEARCH_ICON_Y = 8;
 
     public static final int SORT_BUTTON_X = 114;
-    public static final int SORT_BUTTON_Y = 11;
+    public static final int SORT_BUTTON_Y = 7;
     public static final int SORT_BUTTON_WIDTH = 20;
     public static final int SORT_BUTTON_HEIGHT = 18;
 
@@ -55,6 +57,15 @@ public final class WorkbenchLayout {
     public static final int TAB_RECIPE_Y = 48;
     public static final int TAB_WIDTH = 20;
     public static final int TAB_HEIGHT = 18;
+
+    public static final int RECIPE_BOOK_SEARCH_SHIFT_X = 1;
+    public static final int RECIPE_BOOK_SEARCH_SHIFT_Y = -2;
+    public static final int RECIPE_BOOK_FILTER_SHIFT_Y = -2;
+    public static final int RECIPE_BOOK_ICON_X_FROM_SEARCH = -19;
+    public static final int RECIPE_BOOK_ICON_Y_FROM_SEARCH = -1;
+    public static final int RECIPE_BOOK_BUTTONS_Y_OFFSET = 3;
+    public static final int RECIPE_BOOK_PAGE_CONTROLS_Y_OFFSET = 2;
+    public static final int RECIPE_BOOK_PAGE_TEXT_Y_OFFSET = 2;
 
     private WorkbenchLayout() {
     }

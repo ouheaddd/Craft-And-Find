@@ -21,6 +21,12 @@ public final class WorkbenchTextures {
     public static final ResourceLocation SEARCH_BOX_FOCUSED = texture("search_box_focused.png");
     public static final ResourceLocation SEARCH_ICON = texture("icons/search.png");
 
+    public static final ResourceLocation RECIPE_SEARCH_BOX = texture("recipe_search_box.png");
+    public static final ResourceLocation RECIPE_SEARCH_BOX_FOCUSED = texture("recipe_search_box_focused.png");
+    public static final ResourceLocation RECIPE_FILTER_BUTTON = texture("recipe_filter_button.png");
+    public static final ResourceLocation RECIPE_FILTER_BUTTON_HOVERED = texture("recipe_filter_button_hovered.png");
+    public static final ResourceLocation RECIPE_FILTER_BUTTON_SELECTED = texture("recipe_filter_button_selected.png");
+
     public static final ResourceLocation SORT_BUTTON = texture("sort_button.png");
     public static final ResourceLocation SORT_BUTTON_HOVERED = texture("sort_button_hovered.png");
     public static final ResourceLocation SORT_BUTTON_SELECTED = texture("sort_button_selected.png");
