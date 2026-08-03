@@ -196,33 +196,8 @@ public final class StorageHighlightRenderer {
         }
 
         if (projection.frameAlpha() > 0) {
-            int width = Math.max(1, Math.round(projection.frameWidth()));
-            int height = Math.max(1, Math.round(projection.frameHeight()));
-            int x = Math.round(projection.frameX() - width * 0.5F);
-            int y = Math.round(projection.frameY() - height * 0.5F);
-
-            guiGraphics.pose().pushPose();
-            guiGraphics.pose().translate(0.0F, 0.0F, StorageHighlightStyle.THROUGH_WALL_FRAME_GUI_Z);
-            guiGraphics.setColor(1.0F, 1.0F, 1.0F, projection.frameAlpha() / 255.0F);
-            guiGraphics.blit(
-                    StorageHighlightStyle.MARKER_TEXTURE,
-                    x,
-                    y,
-                    width,
-                    height,
-                    0.0F,
-                    0.0F,
-                    32,
-                    36,
-                    32,
-                    36
-            );
-            // GuiGraphics batches textured quads. Flush while the marker's
-            // shader alpha is still active; resetting the color first makes
-            // the queued frame render fully opaque and then disappear at once.
+            renderFixedGuiFrame(guiGraphics, projection);
             guiGraphics.flush();
-            guiGraphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
-            guiGraphics.pose().popPose();
         }
 
         if (projection.itemAlpha() > 0) {
@@ -235,7 +210,7 @@ public final class StorageHighlightRenderer {
             );
             guiPose.scale(projection.itemScale(), -projection.itemScale(), projection.itemScale());
 
-            MultiBufferSource.BufferSource guiBuffers = minecraft.renderBuffers().bufferSource();
+            MultiBufferSource.BufferSource guiBuffers = guiGraphics.bufferSource();
             MultiBufferSource alphaBuffers = renderType -> new AlphaOverrideVertexConsumer(
                     guiBuffers.getBuffer(
                             projection.itemAlpha() < 255
@@ -257,7 +232,6 @@ public final class StorageHighlightRenderer {
             );
 
             guiPose.popPose();
-            guiBuffers.endBatch();
         }
 
         guiGraphics.flush();
@@ -403,6 +377,11 @@ public final class StorageHighlightRenderer {
 
         float topBlend = markerTopBlend((float) horizontalToCamera.length());
         Vec3 markerPosition = lerp(sidePosition, topPosition, topBlend);
+        Vec3 throughWallPosition = new Vec3(
+                target.centerX(),
+                target.minPos().getY() + StorageHighlightStyle.MARKER_CENTER_Y,
+                target.centerZ()
+        );
 
         boolean gui3d = minecraft.getItemRenderer()
                 .getModel(highlightedStack, minecraft.level, minecraft.player, 0)
@@ -429,7 +408,7 @@ public final class StorageHighlightRenderer {
                 : throughWallAlpha;
         boolean captureGuiMarker = fixedGui3d || throughWallAlpha > 3;
 
-        FixedGuiMarkerGeometry geometry = renderMarkerFrame(
+        FixedGuiMarkerGeometry visibleGeometry = renderMarkerFrame(
                 poseStack,
                 buffers,
                 camera,
@@ -440,6 +419,22 @@ public final class StorageHighlightRenderer {
                 projectionMatrix,
                 guiWidth,
                 guiHeight
+        );
+        FixedGuiMarkerGeometry wallGeometry = wallBlend > 0.0F && captureGuiMarker
+                ? captureMarkerGeometry(
+                        poseStack,
+                        camera,
+                        throughWallPosition,
+                        modelViewMatrix,
+                        projectionMatrix,
+                        guiWidth,
+                        guiHeight
+                )
+                : visibleGeometry;
+        FixedGuiMarkerGeometry geometry = blendGeometry(
+                visibleGeometry,
+                wallGeometry,
+                wallBlend
         );
 
         if (geometry != null && captureGuiMarker) {
@@ -512,6 +507,95 @@ public final class StorageHighlightRenderer {
                 : null;
         poseStack.popPose();
         return projected;
+    }
+
+    private static FixedGuiMarkerGeometry captureMarkerGeometry(
+            PoseStack poseStack,
+            Camera camera,
+            Vec3 markerPosition,
+            Matrix4f modelViewMatrix,
+            Matrix4f projectionMatrix,
+            int guiWidth,
+            int guiHeight
+    ) {
+        poseStack.pushPose();
+        poseStack.translate(markerPosition.x, markerPosition.y, markerPosition.z);
+        poseStack.mulPose(camera.rotation());
+        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F));
+        Matrix4f markerMatrix = new Matrix4f(poseStack.last().pose());
+        FixedGuiMarkerGeometry geometry = projectFixedGuiMarker(
+                markerMatrix,
+                modelViewMatrix,
+                projectionMatrix,
+                guiWidth,
+                guiHeight
+        );
+        poseStack.popPose();
+        return geometry;
+    }
+
+    private static FixedGuiMarkerGeometry blendGeometry(
+            FixedGuiMarkerGeometry visible,
+            FixedGuiMarkerGeometry throughWall,
+            float amount
+    ) {
+        if (visible == null) {
+            return throughWall;
+        }
+        if (throughWall == null) {
+            return visible;
+        }
+        float blend = smoothStep(Math.max(0.0F, Math.min(1.0F, amount)));
+        return new FixedGuiMarkerGeometry(
+                lerp(visible.frameX(), throughWall.frameX(), blend),
+                lerp(visible.frameY(), throughWall.frameY(), blend),
+                lerp(visible.frameWidth(), throughWall.frameWidth(), blend),
+                lerp(visible.frameHeight(), throughWall.frameHeight(), blend),
+                lerp(visible.itemX(), throughWall.itemX(), blend),
+                lerp(visible.itemY(), throughWall.itemY(), blend),
+                lerp(visible.itemScale(), throughWall.itemScale(), blend)
+        );
+    }
+
+    private static void renderFixedGuiFrame(
+            GuiGraphics guiGraphics,
+            FixedGuiMarkerProjection projection
+    ) {
+        PoseStack guiPose = guiGraphics.pose();
+        guiPose.pushPose();
+        guiPose.translate(
+                projection.frameX(),
+                projection.frameY(),
+                StorageHighlightStyle.THROUGH_WALL_FRAME_GUI_Z
+        );
+
+        VertexConsumer frameConsumer = guiGraphics.bufferSource().getBuffer(
+                RenderType.entityTranslucentEmissive(StorageHighlightStyle.MARKER_TEXTURE)
+        );
+        drawGuiQuad(
+                guiPose.last().pose(),
+                frameConsumer,
+                projection.frameWidth(),
+                projection.frameHeight(),
+                projection.frameAlpha()
+        );
+        guiPose.popPose();
+    }
+
+    private static void drawGuiQuad(
+            Matrix4f matrix,
+            VertexConsumer consumer,
+            float width,
+            float height,
+            int alpha
+    ) {
+        float halfWidth = width * 0.5F;
+        float halfHeight = height * 0.5F;
+
+        vertex(consumer, matrix, -halfWidth, halfHeight, 0.0F, 0.0F, 1.0F, alpha);
+        vertex(consumer, matrix, halfWidth, halfHeight, 0.0F, 1.0F, 1.0F, alpha);
+        vertex(consumer, matrix, halfWidth, -halfHeight, 0.0F, 1.0F, 0.0F, alpha);
+        vertex(consumer, matrix, -halfWidth, -halfHeight, 0.0F, 0.0F, 0.0F, alpha);
     }
 
     private static void renderMarkerItem(
@@ -934,6 +1018,10 @@ public final class StorageHighlightRenderer {
 
     private static double unit(long seed) {
         return (mix(seed) >>> 11) * 0x1.0p-53;
+    }
+
+    private static float lerp(float from, float to, float amount) {
+        return from + (to - from) * amount;
     }
 
     private static double lerp(double from, double to, double amount) {
