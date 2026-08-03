@@ -2,6 +2,7 @@ package com.overyourhead.craftandfind.common.network;
 
 import com.overyourhead.craftandfind.client.network.ClientPayloadRegistration;
 import com.overyourhead.craftandfind.common.menu.StorageWorkbenchMenu;
+import com.overyourhead.craftandfind.config.CraftAndFindServerConfig;
 import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.HighlightPositionsPayload;
 import com.overyourhead.craftandfind.common.network.payload.HighlightRequestPayload;
@@ -59,10 +60,16 @@ public final class CraftAndFindNetwork {
             return;
         }
 
-        var targets = menu.refreshStorage().highlightTargets(payload.stack(), player.position());
+        var allTargets = menu.refreshStorage().highlightTargets(payload.stack(), player.position());
+        int targetLimit = Math.min(
+                allTargets.size(),
+                CraftAndFindServerConfig.maxHighlightedContainers()
+        );
+        var visibleTargets = allTargets.subList(0, targetLimit);
+
         PacketDistributor.sendToPlayer(
                 player,
-                new HighlightPositionsPayload(payload.stack(), targets)
+                new HighlightPositionsPayload(payload.stack(), visibleTargets)
         );
     }
 

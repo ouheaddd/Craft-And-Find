@@ -6,7 +6,10 @@ import net.minecraft.world.entity.player.StackedContents;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -187,30 +190,66 @@ public final class NearbyStorage {
             return List.of();
         }
 
-        Map<BlockPos, Integer> amounts = new HashMap<>();
+        Map<BlockPos, Integer> perBlockAmounts = new HashMap<>();
         for (SlotReference reference : currentSlots()) {
             ItemStack stack = reference.currentStack();
             if (stack.isEmpty() || !ItemStack.isSameItemSameComponents(stack, wanted)) {
                 continue;
             }
 
-            amounts.merge(reference.pos(), stack.getCount(), NearbyStorage::saturatedAdd);
+            perBlockAmounts.merge(reference.pos(), stack.getCount(), NearbyStorage::saturatedAdd);
+        }
+
+        Map<HighlightArea, Integer> amounts = new HashMap<>();
+        for (Map.Entry<BlockPos, Integer> entry : perBlockAmounts.entrySet()) {
+            amounts.merge(highlightArea(entry.getKey()), entry.getValue(), NearbyStorage::saturatedAdd);
         }
 
         return amounts.entrySet().stream()
-                .map(entry -> new StorageHighlightTarget(entry.getKey(), entry.getValue()))
+                .map(entry -> new StorageHighlightTarget(
+                        entry.getKey().minPos(),
+                        entry.getKey().maxPos(),
+                        entry.getValue()
+                ))
                 .sorted(Comparator
                         .comparingInt(StorageHighlightTarget::count)
                         .reversed()
-                        .thenComparingDouble(target -> distanceSquared(target.pos(), observerPosition))
-                        .thenComparingLong(target -> target.pos().asLong()))
+                        .thenComparingDouble(target -> distanceSquared(target, observerPosition))
+                        .thenComparingLong(target -> target.minPos().asLong())
+                        .thenComparingLong(target -> target.maxPos().asLong()))
                 .toList();
     }
 
-    private static double distanceSquared(BlockPos pos, Vec3 observerPosition) {
-        double x = pos.getX() + 0.5D - observerPosition.x;
-        double y = pos.getY() + 0.5D - observerPosition.y;
-        double z = pos.getZ() + 0.5D - observerPosition.z;
+    /** Resolves both halves of a live vanilla normal or trapped chest. */
+    private HighlightArea highlightArea(BlockPos pos) {
+        if (level == null || !level.hasChunkAt(pos)) {
+            return HighlightArea.single(pos);
+        }
+
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ChestBlock)
+                || !state.hasProperty(ChestBlock.TYPE)
+                || state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
+            return HighlightArea.single(pos);
+        }
+
+        BlockPos partnerPos = pos.relative(ChestBlock.getConnectedDirection(state));
+        if (!level.hasChunkAt(partnerPos)) {
+            return HighlightArea.single(pos);
+        }
+
+        BlockState partnerState = level.getBlockState(partnerPos);
+        boolean validPartner = partnerState.getBlock() == state.getBlock()
+                && partnerState.hasProperty(ChestBlock.TYPE)
+                && partnerState.getValue(ChestBlock.TYPE) != ChestType.SINGLE
+                && partnerPos.relative(ChestBlock.getConnectedDirection(partnerState)).equals(pos);
+        return validPartner ? HighlightArea.of(pos, partnerPos) : HighlightArea.single(pos);
+    }
+
+    private static double distanceSquared(StorageHighlightTarget target, Vec3 observerPosition) {
+        double x = target.centerX() - observerPosition.x;
+        double y = target.centerY() - observerPosition.y;
+        double z = target.centerZ() - observerPosition.z;
         return x * x + y * y + z * z;
     }
 
@@ -252,6 +291,33 @@ public final class NearbyStorage {
     private static int saturatedAdd(int first, int second) {
         long result = (long) first + second;
         return result > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) result;
+    }
+
+
+    private record HighlightArea(BlockPos minPos, BlockPos maxPos) {
+        private HighlightArea {
+            minPos = minPos.immutable();
+            maxPos = maxPos.immutable();
+        }
+
+        static HighlightArea single(BlockPos pos) {
+            return new HighlightArea(pos, pos);
+        }
+
+        static HighlightArea of(BlockPos first, BlockPos second) {
+            return new HighlightArea(
+                    new BlockPos(
+                            Math.min(first.getX(), second.getX()),
+                            Math.min(first.getY(), second.getY()),
+                            Math.min(first.getZ(), second.getZ())
+                    ),
+                    new BlockPos(
+                            Math.max(first.getX(), second.getX()),
+                            Math.max(first.getY(), second.getY()),
+                            Math.max(first.getZ(), second.getZ())
+                    )
+            );
+        }
     }
 
     private record ContainerReference(BlockPos pos, int distanceSquared) {

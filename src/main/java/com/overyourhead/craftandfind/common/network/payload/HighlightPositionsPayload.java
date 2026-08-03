@@ -2,6 +2,7 @@ package com.overyourhead.craftandfind.common.network.payload;
 
 import com.overyourhead.craftandfind.CraftAndFindMod;
 import com.overyourhead.craftandfind.common.storage.StorageHighlightTarget;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -31,7 +32,8 @@ public record HighlightPositionsPayload(
                 buffer.writeVarInt(size);
                 for (int index = 0; index < size; index++) {
                     StorageHighlightTarget target = payload.targets().get(index);
-                    buffer.writeBlockPos(target.pos());
+                    buffer.writeBlockPos(target.minPos());
+                    buffer.writeBlockPos(target.maxPos());
                     buffer.writeVarInt(target.count());
                 }
             },
@@ -40,12 +42,13 @@ public record HighlightPositionsPayload(
                 int size = readBoundedSize(buffer, MAX_TARGETS, "highlight targets");
                 List<StorageHighlightTarget> targets = new ArrayList<>(size);
                 for (int index = 0; index < size; index++) {
-                    var pos = buffer.readBlockPos();
+                    BlockPos minPos = buffer.readBlockPos();
+                    BlockPos maxPos = buffer.readBlockPos();
                     int count = buffer.readVarInt();
                     if (count < 0) {
                         throw new IllegalArgumentException("Invalid highlight item count: " + count);
                     }
-                    targets.add(new StorageHighlightTarget(pos, count));
+                    targets.add(new StorageHighlightTarget(minPos, maxPos, count));
                 }
                 return new HighlightPositionsPayload(stack, targets);
             }
@@ -54,12 +57,12 @@ public record HighlightPositionsPayload(
     public HighlightPositionsPayload {
         stack = stack.copyWithCount(1);
 
-        Map<Long, StorageHighlightTarget> unique = new LinkedHashMap<>();
+        Map<TargetKey, StorageHighlightTarget> unique = new LinkedHashMap<>();
         for (StorageHighlightTarget target : targets) {
             if (target.count() <= 0 || unique.size() >= MAX_TARGETS) {
                 continue;
             }
-            unique.putIfAbsent(target.pos().asLong(), target);
+            unique.putIfAbsent(new TargetKey(target.minPos(), target.maxPos()), target);
         }
         targets = List.copyOf(unique.values());
     }
@@ -75,5 +78,8 @@ public record HighlightPositionsPayload(
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
+    }
+
+    private record TargetKey(BlockPos minPos, BlockPos maxPos) {
     }
 }

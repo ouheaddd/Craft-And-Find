@@ -1,11 +1,11 @@
 package com.overyourhead.craftandfind.common.menu;
 
-import com.overyourhead.craftandfind.CraftAndFindMod;
 import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
 import com.overyourhead.craftandfind.common.recipe.NearbyServerPlaceRecipe;
 import com.overyourhead.craftandfind.common.storage.NearbyStorage;
 import com.overyourhead.craftandfind.common.storage.StorageItemEntry;
+import com.overyourhead.craftandfind.config.CraftAndFindServerConfig;
 import com.overyourhead.craftandfind.core.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -24,9 +24,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.List;
 
 public final class StorageWorkbenchMenu extends CraftingMenu {
-    private static final int SNAPSHOT_INTERVAL_TICKS = 20;
-    private static final int CONTAINER_SCAN_INTERVAL_TICKS = 100;
-
     private final ContainerLevelAccess workbenchAccess;
     private final BlockPos workbenchPos;
     private final Level level;
@@ -50,8 +47,8 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         this.serverPlayer = playerInventory.player instanceof ServerPlayer player ? player : null;
         this.cachedStorage = serverPlayer == null
                 ? NearbyStorage.empty(workbenchPos)
-                : NearbyStorage.scan(level, workbenchPos, CraftAndFindMod.STORAGE_RADIUS);
-        this.snapshotTicker = SNAPSHOT_INTERVAL_TICKS;
+                : NearbyStorage.scan(level, workbenchPos, CraftAndFindServerConfig.searchRadius());
+        this.snapshotTicker = CraftAndFindServerConfig.contentRefreshIntervalTicks();
         this.containerScanTicker = 0;
 
         if (serverPlayer != null) {
@@ -140,21 +137,21 @@ public final class StorageWorkbenchMenu extends CraftingMenu {
         }
 
         containerScanTicker++;
-        if (containerScanTicker >= CONTAINER_SCAN_INTERVAL_TICKS) {
+        if (containerScanTicker >= CraftAndFindServerConfig.containerScanIntervalTicks()) {
             refreshStorage();
         }
 
         snapshotTicker++;
-        if (snapshotTicker >= SNAPSHOT_INTERVAL_TICKS) {
+        if (snapshotTicker >= CraftAndFindServerConfig.contentRefreshIntervalTicks()) {
             snapshotTicker = 0;
             sendSnapshot();
         }
     }
 
-    /** Performs a full radius scan and starts a fresh five-second cache window. */
+    /** Performs a full configured-radius scan and restarts the container scan timer. */
     public NearbyStorage refreshStorage() {
         if (serverPlayer != null) {
-            cachedStorage = NearbyStorage.scan(level, workbenchPos, CraftAndFindMod.STORAGE_RADIUS);
+            cachedStorage = NearbyStorage.scan(level, workbenchPos, CraftAndFindServerConfig.searchRadius());
             containerScanTicker = 0;
         }
         return cachedStorage;
