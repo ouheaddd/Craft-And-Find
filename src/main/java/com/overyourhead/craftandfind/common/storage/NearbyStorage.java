@@ -1,6 +1,7 @@
 package com.overyourhead.craftandfind.common.storage;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.StackedContents;
 import net.minecraft.world.inventory.Slot;
@@ -11,6 +12,8 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,19 +22,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A cached view of loaded container positions inside the workbench radius.
+ * A cached view of loaded storage positions inside the workbench radius.
  * Items are never stored here: every operation resolves the current block
- * entity and reads or moves stacks in the original container.
+ * entity / item handler and reads or moves stacks in the original storage.
  */
 public final class NearbyStorage {
     private final Level level;
     private final BlockPos origin;
-    private final List<ContainerReference> containers;
+    private final List<StorageReference> storages;
 
-    private NearbyStorage(Level level, BlockPos origin, List<ContainerReference> containers) {
+    private NearbyStorage(Level level, BlockPos origin, List<StorageReference> storages) {
         this.level = level;
         this.origin = origin.immutable();
-        this.containers = List.copyOf(containers);
+        this.storages = List.copyOf(storages);
     }
 
     public static NearbyStorage empty(BlockPos origin) {
@@ -39,11 +42,15 @@ public final class NearbyStorage {
     }
 
     /**
-     * Performs the relatively expensive radius scan. Only container positions
+     * Performs the relatively expensive radius scan. Only storage positions
      * are cached, so slot contents can still change immediately between scans.
+     *
+     * Vanilla {@link Container}s keep their old behavior. Modded block entity
+     * inventories that expose NeoForge's item-handler capability are supported
+     * as a fallback without a hard dependency on any specific storage mod.
      */
     public static NearbyStorage scan(Level level, BlockPos origin, int radius) {
-        List<ContainerReference> found = new ArrayList<>();
+        List<StorageReference> found = new ArrayList<>();
         BlockPos min = origin.offset(-radius, -radius, -radius);
         BlockPos max = origin.offset(radius, radius, radius);
         double radiusSquared = (double) radius * radius;
@@ -56,9 +63,8 @@ public final class NearbyStorage {
                 continue;
             }
 
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-            if (blockEntity instanceof Container) {
-                found.add(new ContainerReference(pos, (int) pos.distSqr(origin)));
+            if (resolveStorage(level, pos) != null) {
+                found.add(new StorageReference(pos, (int) pos.distSqr(origin)));
             }
         }
 
@@ -116,7 +122,7 @@ public final class NearbyStorage {
 
     /**
      * Moves up to {@code remaining} matching items into a crafting-grid slot.
-     * Started storage stacks are consumed first, then nearer containers.
+     * Started storage stacks are consumed first, then nearer storages.
      * Returns the number of items still missing after the operation.
      */
     public int moveToCraftingSlot(Slot target, ItemStack wanted, int remaining) {
@@ -141,7 +147,7 @@ public final class NearbyStorage {
             }
 
             ItemStack source = reference.currentStack();
-            if (source.isEmpty()) {
+            if (source.isEmpty() || !ItemStack.isSameItemSameComponents(source, wanted)) {
                 continue;
             }
 
@@ -156,7 +162,26 @@ public final class NearbyStorage {
                 break;
             }
 
-            int moved = Math.min(Math.min(source.getCount(), remaining), room);
+            int requested = Math.min(Math.min(source.getCount(), remaining), room);
+            if (requested <= 0) {
+                continue;
+            }
+
+            // IItemHandler implementations are allowed to reject or reduce an
+            // extraction request. Simulate first so the crafting grid is only
+            // changed after the source storage confirms the operation.
+            ItemStack simulated = reference.extract(requested, true);
+            if (simulated.isEmpty() || !ItemStack.isSameItemSameComponents(simulated, wanted)) {
+                continue;
+            }
+
+            int extractCount = Math.min(requested, simulated.getCount());
+            ItemStack extracted = reference.extract(extractCount, false);
+            if (extracted.isEmpty() || !ItemStack.isSameItemSameComponents(extracted, wanted)) {
+                continue;
+            }
+
+            int moved = Math.min(extractCount, extracted.getCount());
             if (moved <= 0) {
                 continue;
             }
@@ -168,12 +193,6 @@ public final class NearbyStorage {
                 target.setChanged();
             }
 
-            source.shrink(moved);
-            reference.container().setItem(
-                    reference.slot(),
-                    source.isEmpty() ? ItemStack.EMPTY : source
-            );
-            reference.container().setChanged();
             remaining -= moved;
         }
 
@@ -181,9 +200,9 @@ public final class NearbyStorage {
     }
 
     /**
-     * Returns every container holding the selected stack, together with its
-     * exact amount. The container with the largest amount is first; equal
-     * amounts are resolved by distance to the requesting player.
+     * Returns every storage block holding the selected stack, together with its
+     * exact amount. The storage with the largest amount is first; equal amounts
+     * are resolved by distance to the requesting player.
      */
     public List<StorageHighlightTarget> highlightTargets(ItemStack wanted, Vec3 observerPosition) {
         if (wanted.isEmpty()) {
@@ -255,26 +274,26 @@ public final class NearbyStorage {
 
     /**
      * Resolves cached positions against the live world. Removed or unloaded
-     * containers disappear immediately, while newly filled slots are visible
+     * storages disappear immediately, while newly filled slots are visible
      * without waiting for the next radius scan.
      */
     private List<SlotReference> currentSlots() {
-        if (level == null || containers.isEmpty()) {
+        if (level == null || storages.isEmpty()) {
             return List.of();
         }
 
         List<SlotReference> result = new ArrayList<>();
-        for (ContainerReference reference : containers) {
-            Container container = reference.currentContainer(level);
-            if (container == null) {
+        for (StorageReference reference : storages) {
+            StorageAccess storage = reference.currentStorage(level);
+            if (storage == null) {
                 continue;
             }
 
-            for (int slot = 0; slot < container.getContainerSize(); slot++) {
-                if (!container.getItem(slot).isEmpty()) {
+            for (int slot = 0; slot < storage.getSlots(); slot++) {
+                if (!storage.getStack(slot).isEmpty()) {
                     result.add(new SlotReference(
                             reference.pos(),
-                            container,
+                            storage,
                             slot,
                             reference.distanceSquared()
                     ));
@@ -282,6 +301,61 @@ public final class NearbyStorage {
             }
         }
         return result;
+    }
+
+    /**
+     * Resolves a storage at a position without introducing a dependency on the
+     * providing mod. Containers preserve the original Craft & Find behavior;
+     * NeoForge item handlers are the generic compatibility fallback.
+     */
+    private static StorageAccess resolveStorage(Level level, BlockPos pos) {
+        if (!level.hasChunkAt(pos)) {
+            return null;
+        }
+
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity instanceof Container container) {
+            return new ContainerStorageAccess(container);
+        }
+
+        // Only probe capability-backed block entities. This keeps the scan
+        // focused on real inventories and avoids treating capability-only
+        // utility blocks such as composters as general nearby storage.
+        if (blockEntity == null) {
+            return null;
+        }
+
+        IItemHandler itemHandler = findItemHandler(level, pos);
+        return itemHandler != null ? new ItemHandlerStorageAccess(itemHandler) : null;
+    }
+
+    /**
+     * Prefer an unsided handler because storage blocks commonly expose their
+     * complete inventory that way. If a mod only exposes sided capabilities,
+     * fall back to the side with the largest visible slot set.
+     */
+    private static IItemHandler findItemHandler(Level level, BlockPos pos) {
+        IItemHandler unsided = level.getCapability(
+                Capabilities.ItemHandler.BLOCK,
+                pos,
+                null
+        );
+        if (unsided != null) {
+            return unsided;
+        }
+
+        IItemHandler best = null;
+        for (Direction direction : Direction.values()) {
+            IItemHandler candidate = level.getCapability(
+                    Capabilities.ItemHandler.BLOCK,
+                    pos,
+                    direction
+            );
+            if (candidate != null && (best == null || candidate.getSlots() > best.getSlots())) {
+                best = candidate;
+            }
+        }
+        return best;
     }
 
     private static boolean isStartedStack(ItemStack stack) {
@@ -293,6 +367,64 @@ public final class NearbyStorage {
         return result > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) result;
     }
 
+    private interface StorageAccess {
+        int getSlots();
+
+        ItemStack getStack(int slot);
+
+        ItemStack extract(int slot, int amount, boolean simulate);
+    }
+
+    private record ContainerStorageAccess(Container container) implements StorageAccess {
+        @Override
+        public int getSlots() {
+            return container.getContainerSize();
+        }
+
+        @Override
+        public ItemStack getStack(int slot) {
+            return container.getItem(slot);
+        }
+
+        @Override
+        public ItemStack extract(int slot, int amount, boolean simulate) {
+            if (amount <= 0) {
+                return ItemStack.EMPTY;
+            }
+
+            ItemStack stack = container.getItem(slot);
+            if (stack.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+
+            if (simulate) {
+                return stack.copyWithCount(Math.min(amount, stack.getCount()));
+            }
+
+            ItemStack extracted = container.removeItem(slot, amount);
+            if (!extracted.isEmpty()) {
+                container.setChanged();
+            }
+            return extracted;
+        }
+    }
+
+    private record ItemHandlerStorageAccess(IItemHandler itemHandler) implements StorageAccess {
+        @Override
+        public int getSlots() {
+            return itemHandler.getSlots();
+        }
+
+        @Override
+        public ItemStack getStack(int slot) {
+            return itemHandler.getStackInSlot(slot);
+        }
+
+        @Override
+        public ItemStack extract(int slot, int amount, boolean simulate) {
+            return itemHandler.extractItem(slot, amount, simulate);
+        }
+    }
 
     private record HighlightArea(BlockPos minPos, BlockPos maxPos) {
         private HighlightArea {
@@ -320,19 +452,19 @@ public final class NearbyStorage {
         }
     }
 
-    private record ContainerReference(BlockPos pos, int distanceSquared) {
-        Container currentContainer(Level level) {
-            if (!level.hasChunkAt(pos)) {
-                return null;
-            }
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-            return blockEntity instanceof Container container ? container : null;
+    private record StorageReference(BlockPos pos, int distanceSquared) {
+        StorageAccess currentStorage(Level level) {
+            return resolveStorage(level, pos);
         }
     }
 
-    private record SlotReference(BlockPos pos, Container container, int slot, int distanceSquared) {
+    private record SlotReference(BlockPos pos, StorageAccess storage, int slot, int distanceSquared) {
         ItemStack currentStack() {
-            return container.getItem(slot);
+            return storage.getStack(slot);
+        }
+
+        ItemStack extract(int amount, boolean simulate) {
+            return storage.extract(slot, amount, simulate);
         }
     }
 
