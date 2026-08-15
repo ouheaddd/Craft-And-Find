@@ -121,6 +121,30 @@ public final class NearbyStorage {
     }
 
     /**
+     * Returns as much of a crafting-grid stack as possible to nearby storage.
+     * The returned stack is the remainder that no storage accepted.
+     */
+    public ItemStack insert(ItemStack stack) {
+        if (stack.isEmpty() || level == null || storages.isEmpty()) {
+            return stack.isEmpty() ? ItemStack.EMPTY : stack.copy();
+        }
+
+        ItemStack remaining = stack.copy();
+        for (StorageReference reference : storages) {
+            StorageAccess storage = reference.currentStorage(level);
+            if (storage == null) {
+                continue;
+            }
+
+            remaining = storage.insert(remaining, false);
+            if (remaining.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+        }
+        return remaining;
+    }
+
+    /**
      * Moves up to {@code remaining} matching items into a crafting-grid slot.
      * Started storage stacks are consumed first, then nearer storages.
      * Returns the number of items still missing after the operation.
@@ -373,6 +397,8 @@ public final class NearbyStorage {
         ItemStack getStack(int slot);
 
         ItemStack extract(int slot, int amount, boolean simulate);
+
+        ItemStack insert(ItemStack stack, boolean simulate);
     }
 
     private record ContainerStorageAccess(Container container) implements StorageAccess {
@@ -407,6 +433,51 @@ public final class NearbyStorage {
             }
             return extracted;
         }
+
+        @Override
+        public ItemStack insert(ItemStack stack, boolean simulate) {
+            if (stack.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+
+            ItemStack remaining = stack.copy();
+            boolean changed = false;
+            for (int pass = 0; pass < 2 && !remaining.isEmpty(); pass++) {
+                for (int slot = 0; slot < container.getContainerSize() && !remaining.isEmpty(); slot++) {
+                    ItemStack existing = container.getItem(slot);
+                    boolean matching = !existing.isEmpty()
+                            && ItemStack.isSameItemSameComponents(existing, remaining);
+                    if ((pass == 0 && !matching) || (pass == 1 && !existing.isEmpty())) {
+                        continue;
+                    }
+                    if (!container.canPlaceItem(slot, remaining)) {
+                        continue;
+                    }
+
+                    int limit = Math.min(container.getMaxStackSize(), remaining.getMaxStackSize());
+                    int room = existing.isEmpty() ? limit : limit - existing.getCount();
+                    if (room <= 0) {
+                        continue;
+                    }
+
+                    int moved = Math.min(room, remaining.getCount());
+                    if (!simulate) {
+                        if (existing.isEmpty()) {
+                            container.setItem(slot, remaining.copyWithCount(moved));
+                        } else {
+                            existing.grow(moved);
+                        }
+                        changed = true;
+                    }
+                    remaining.shrink(moved);
+                }
+            }
+
+            if (changed) {
+                container.setChanged();
+            }
+            return remaining;
+        }
     }
 
     private record ItemHandlerStorageAccess(IItemHandler itemHandler) implements StorageAccess {
@@ -423,6 +494,15 @@ public final class NearbyStorage {
         @Override
         public ItemStack extract(int slot, int amount, boolean simulate) {
             return itemHandler.extractItem(slot, amount, simulate);
+        }
+
+        @Override
+        public ItemStack insert(ItemStack stack, boolean simulate) {
+            ItemStack remaining = stack.copy();
+            for (int slot = 0; slot < itemHandler.getSlots() && !remaining.isEmpty(); slot++) {
+                remaining = itemHandler.insertItem(slot, remaining, simulate);
+            }
+            return remaining;
         }
     }
 
