@@ -40,8 +40,8 @@ public final class WorkbenchRecipePanel {
     private static final int GRID_X = 11;
     private static final int GRID_Y = 34;
     private static final int PAGE_Y = 139;
-    private static final int PREVIOUS_X = 35;
-    private static final int NEXT_X = 92;
+    private static final int PREVIOUS_X = 33;
+    private static final int NEXT_X = 94;
     private static final int PAGE_BUTTON_WIDTH = 20;
     private static final int PAGE_BUTTON_HEIGHT = 18;
 
