@@ -6,12 +6,6 @@
   "client": [
     "client.CraftingMenuMixin",
     "client.RecipeBookComponentAccessor",
-    "client.RecipeBookComponentTextureMixin",
-    "client.RecipeBookSearchStyleMixin",
-    "client.RecipeButtonTextureMixin",
-    "client.RecipeBookTabButtonTextureMixin",
-    "client.RecipeBookPageTextureMixin",
-    "client.RecipeBookPageLayoutMixin",
     "client.SlotPositionAccessor"
   ],
   "injectors": {

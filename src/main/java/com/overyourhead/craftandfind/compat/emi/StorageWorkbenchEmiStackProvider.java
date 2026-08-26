@@ -11,6 +11,9 @@ public final class StorageWorkbenchEmiStackProvider implements EmiStackProvider<
     public EmiStackInteraction getStackAt(StorageWorkbenchScreen screen, int x, int y) {
         ItemStack stack = screen.storageItemUnderMouse(x, y);
         if (stack.isEmpty()) {
+            stack = screen.recipeItemUnderMouse(x, y);
+        }
+        if (stack.isEmpty()) {
             return EmiStackInteraction.EMPTY;
         }
 

@@ -22,6 +22,7 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
     private static boolean rememberedRecipeTabActive;
 
     private StoragePanel storagePanel;
+    private WorkbenchRecipePanel recipePanel;
     private WorkbenchIconButton compassButton;
     private WorkbenchIconButton customRecipeButton;
     private ImageButton vanillaRecipeBookButton;
@@ -50,8 +51,14 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
             }
         }
 
+        // Craft & Find owns its recipe panel. Keep Minecraft's recipe book hidden
+        // even if another mod removes, redirects or disables the vanilla book.
+        setRecipeBookVisible(false);
+
         storagePanel = new StoragePanel(font, menu.containerId, this::onClose);
         addWidget(storagePanel.searchBox());
+        recipePanel = new WorkbenchRecipePanel(minecraft, font, menu);
+        addWidget(recipePanel.searchBox());
 
         compassButton = addRenderableWidget(new WorkbenchIconButton(
                 0,
@@ -66,7 +73,7 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
                 0,
                 WorkbenchTextures.RECIPE_BOOK_ICON,
                 Component.translatable("gui.craftandfind.open_recipes"),
-                () -> getRecipeBookComponent().isVisible(),
+                () -> recipePanel != null && recipePanel.isOpen(),
                 this::toggleRecipeBook
         ));
         applyActiveTabState();
@@ -160,6 +167,9 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
     @Override
     public void containerTick() {
         super.containerTick();
+        if (recipePanel != null) {
+            recipePanel.tick();
+        }
         updateCustomPositions();
     }
 
@@ -168,11 +178,15 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
         updateCustomPositions();
         super.render(graphics, mouseX, mouseY, partialTick);
         storagePanel.render(graphics, mouseX, mouseY, partialTick);
+        recipePanel.render(graphics, mouseX, mouseY, partialTick);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (storagePanel.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+        if (recipePanel.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -199,6 +213,9 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
         if (storagePanel.mouseScrolled(mouseX, mouseY, scrollY)) {
             return true;
         }
+        if (recipePanel.mouseScrolled(mouseX, mouseY, scrollY)) {
+            return true;
+        }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
@@ -213,12 +230,18 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
             storagePanel.searchBox().keyPressed(keyCode, scanCode, modifiers);
             return true;
         }
+        if (recipePanel != null && recipePanel.keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         if (storagePanel.isOpen() && storagePanel.searchBox().charTyped(codePoint, modifiers)) {
+            return true;
+        }
+        if (recipePanel != null && recipePanel.charTyped(codePoint, modifiers)) {
             return true;
         }
         return super.charTyped(codePoint, modifiers);
@@ -258,6 +281,17 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
         return new Rect2i(storagePanel.left(), storagePanel.top(), StoragePanel.WIDTH, StoragePanel.HEIGHT);
     }
 
+    public boolean isRecipePanelOpen() {
+        return recipePanel != null && recipePanel.isOpen();
+    }
+
+    public Rect2i recipePanelArea() {
+        if (recipePanel == null) {
+            return new Rect2i(0, 0, 0, 0);
+        }
+        return new Rect2i(recipePanel.left() - 24, recipePanel.top(), WorkbenchRecipePanel.WIDTH + 24, WorkbenchRecipePanel.HEIGHT);
+    }
+
     public ItemStack storageItemUnderMouse(double mouseX, double mouseY) {
         if (storagePanel == null) {
             return ItemStack.EMPTY;
@@ -265,15 +299,32 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
         return storagePanel.itemUnderMouse(mouseX, mouseY);
     }
 
+    public ItemStack recipeItemUnderMouse(double mouseX, double mouseY) {
+        if (recipePanel == null) {
+            return ItemStack.EMPTY;
+        }
+        return recipePanel.itemUnderMouse(mouseX, mouseY);
+    }
+
     public void onStorageUpdated() {
         if (storagePanel != null) {
             storagePanel.onStorageUpdated();
         }
+        if (recipePanel != null) {
+            recipePanel.onStorageUpdated();
+        }
 
-        // ClientPayloadHandler marks the player inventory changed, so the
-        // recipe book rebuilds its stacked contents on the next client tick.
-        // Calling slotClicked here also clears the active ghost recipe.
-        recipesUpdated();
+        // Keep vanilla's hidden ghost-recipe component in sync without using
+        // its recipe collections as our source of recipes.
+        super.recipesUpdated();
+    }
+
+    @Override
+    public void recipesUpdated() {
+        super.recipesUpdated();
+        if (recipePanel != null) {
+            recipePanel.recipesUpdated();
+        }
     }
 
     /** Draws the ingredient layout for an unavailable recipe, like vanilla. */
@@ -307,7 +358,7 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
     }
 
     private void toggleRecipeBook() {
-        if (recipeTabActive && getRecipeBookComponent().isVisible()) {
+        if (recipeTabActive && recipePanel != null && recipePanel.isOpen()) {
             return;
         }
 
@@ -317,60 +368,49 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
     }
 
     private void applyActiveTabState() {
-        if (recipeTabActive) {
-            storagePanel.setOpen(false);
-            if (!getRecipeBookComponent().isVisible()) {
-                setRecipeBookVisible(true);
-            }
-            resetMainPosition();
-        } else {
-            if (getRecipeBookComponent().isVisible()) {
-                setRecipeBookVisible(false);
-            }
-            storagePanel.setOpen(true);
-            leftPos = width >= 379
-                    ? (width - imageWidth) / 2 + 77
-                    : (width - imageWidth) / 2;
+        // The vanilla component remains hidden permanently. It is retained only
+        // for vanilla ghost-recipe rendering, never as Craft & Find's recipe UI.
+        if (getRecipeBookComponent().isVisible()) {
+            setRecipeBookVisible(false);
         }
 
+        if (recipeTabActive) {
+            storagePanel.setOpen(false);
+            recipePanel.setOpen(true);
+        } else {
+            recipePanel.setOpen(false);
+            storagePanel.setOpen(true);
+        }
+
+        leftPos = mainLeftForActiveTab();
         updateCustomPositions();
     }
 
     private void setRecipeBookVisible(boolean visible) {
-        // EMI can reinterpret the vanilla recipe-book toggle as its own sidebar
-        // action. Craft & Find has a dedicated recipe tab, so control the actual
-        // vanilla recipe book directly and leave EMI's sidebar state untouched.
         ((RecipeBookComponentAccessor) (Object) getRecipeBookComponent())
                 .craftandfind$setVisible(visible);
     }
 
-    private void resetMainPosition() {
-        if (!getRecipeBookComponent().isVisible()) {
-            leftPos = (width - imageWidth) / 2;
-            return;
-        }
-
+    private int mainLeftForActiveTab() {
         if (width < 379) {
-            leftPos = getRecipeBookComponent().updateScreenPosition(width, imageWidth);
-            return;
+            return (width - imageWidth) / 2;
+        }
+        if (!recipeTabActive) {
+            return (width - imageWidth) / 2 + 77;
         }
 
+        // This is exactly the old themed vanilla recipe-book geometry. Keeping
+        // the formula avoids even a one-pixel parity shift when switching tabs.
         int recipePanelX = (width - WorkbenchLayout.PANEL_WIDTH) / 2 - 86;
-        leftPos = recipePanelX
-                + WorkbenchLayout.PANEL_WIDTH
-                + WorkbenchLayout.PANEL_GAP;
+        return recipePanelX + WorkbenchLayout.PANEL_WIDTH + WorkbenchLayout.PANEL_GAP;
     }
 
     private void updateCustomPositions() {
-        if (storagePanel == null || compassButton == null || customRecipeButton == null) {
+        if (storagePanel == null || recipePanel == null || compassButton == null || customRecipeButton == null) {
             return;
         }
 
-        if (storagePanel.isOpen() && width >= 379) {
-            leftPos = (width - imageWidth) / 2 + 77;
-        } else if (recipeTabActive) {
-            resetMainPosition();
-        }
+        leftPos = mainLeftForActiveTab();
 
         int buttonX = leftPos + WorkbenchLayout.TAB_BUTTON_X;
         compassButton.setX(buttonX);
@@ -378,6 +418,7 @@ public final class StorageWorkbenchScreen extends CraftingScreen {
         customRecipeButton.setX(buttonX);
         customRecipeButton.setY(topPos + WorkbenchLayout.TAB_RECIPE_Y);
         storagePanel.updatePosition(leftPos, width, height);
+        recipePanel.updatePosition(leftPos, width, height);
     }
 
     private void applyResultSlotShift() {

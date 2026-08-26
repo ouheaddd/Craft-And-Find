@@ -6,8 +6,10 @@ import com.overyourhead.craftandfind.config.CraftAndFindServerConfig;
 import com.overyourhead.craftandfind.common.network.payload.GhostRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.HighlightPositionsPayload;
 import com.overyourhead.craftandfind.common.network.payload.HighlightRequestPayload;
+import com.overyourhead.craftandfind.common.network.payload.PlaceRecipePayload;
 import com.overyourhead.craftandfind.common.network.payload.StorageSnapshotPayload;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -26,6 +28,11 @@ public final class CraftAndFindNetwork {
                 HighlightRequestPayload.TYPE,
                 HighlightRequestPayload.STREAM_CODEC,
                 CraftAndFindNetwork::handleHighlightRequest
+        );
+        registrar.playToServer(
+                PlaceRecipePayload.TYPE,
+                PlaceRecipePayload.STREAM_CODEC,
+                CraftAndFindNetwork::handlePlaceRecipe
         );
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -47,6 +54,24 @@ public final class CraftAndFindNetwork {
                     CraftAndFindNetwork::ignoreGhostRecipe
             );
         }
+    }
+
+    private static void handlePlaceRecipe(PlaceRecipePayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) {
+            return;
+        }
+        if (!(player.containerMenu instanceof StorageWorkbenchMenu menu)) {
+            return;
+        }
+        if (menu.containerId != payload.containerId()) {
+            return;
+        }
+
+        player.level().getRecipeManager().byKey(payload.recipeId()).ifPresent(recipe -> {
+            if (recipe.value() instanceof CraftingRecipe) {
+                menu.handlePlacement(payload.placeAll(), recipe, player);
+            }
+        });
     }
 
     private static void handleHighlightRequest(HighlightRequestPayload payload, IPayloadContext context) {
