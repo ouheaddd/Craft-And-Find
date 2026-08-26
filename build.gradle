@@ -18,6 +18,22 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+repositories {
+    mavenCentral()
+
+    // JEI
+    maven {
+        name = 'BlameJared'
+        url = 'https://maven.blamejared.com/'
+    }
+
+    // EMI
+    maven {
+        name = 'Sleeping Town'
+        url = 'https://repo.sleeping.town/'
+    }
+}
+
 neoForge {
     version = project.neo_version
 
@@ -47,6 +63,30 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
+}
+
+// Optional mods used only while running the dev client.
+// ModDevGradle does not create localRuntime automatically in this project,
+// so define it before using it below.
+configurations {
+    localRuntime
+    runtimeClasspath.extendsFrom localRuntime
+}
+
+dependencies {
+    // JEI 1.21.1 API: optional compatibility at compile time.
+    compileOnly "mezz.jei:jei-1.21.1-common-api:19.44.0.405"
+    compileOnly "mezz.jei:jei-1.21.1-neoforge-api:19.44.0.405"
+
+    // Keep JEI enabled for the first dev test. This does not make JEI a
+    // required dependency of the released Craft & Find jar.
+    // localRuntime "mezz.jei:jei-1.21.1-neoforge:19.44.0.405"
+
+    // EMI 1.21.1 API: optional compatibility at compile time.
+    compileOnly "dev.emi:emi-neoforge:1.1.24+1.21.1:api"
+
+    // For a clean EMI test later: comment JEI localRuntime above and uncomment this.
+     localRuntime "dev.emi:emi-neoforge:1.1.24+1.21.1"
 }
 
 var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {

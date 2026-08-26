@@ -2,6 +2,7 @@ package com.overyourhead.craftandfind.common.storage;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.StackedContents;
 import net.minecraft.world.inventory.Slot;
@@ -27,6 +28,8 @@ import java.util.Map;
  * entity / item handler and reads or moves stacks in the original storage.
  */
 public final class NearbyStorage {
+    private static final String SCULK_SENTINEL_CHEST_ID = "curiouschests:sculk_sentinel_chest";
+
     private final Level level;
     private final BlockPos origin;
     private final List<StorageReference> storages;
@@ -334,6 +337,15 @@ public final class NearbyStorage {
      */
     private static StorageAccess resolveStorage(Level level, BlockPos pos) {
         if (!level.hasChunkAt(pos)) {
+            return null;
+        }
+
+        // Curious Chests' Sculk Sentinel Chest is intentionally invisible to
+        // Craft & Find. Check the block id before touching its block entity or
+        // any inventory/capability API, so its contents can never be read here.
+        if (SCULK_SENTINEL_CHEST_ID.equals(
+                BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock()).toString()
+        )) {
             return null;
         }
 
