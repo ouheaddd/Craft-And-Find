@@ -280,19 +280,38 @@ public final class WorkbenchRecipePanel {
             return true;
         }
 
-        if (button == 0) {
-            RecipeEntry entry = entryAt(mouseX, mouseY);
-            if (entry != null) {
-                PacketDistributor.sendToServer(new PlaceRecipePayload(
-                        menu.containerId,
-                        entry.holder().id(),
-                        Screen.hasShiftDown()
-                ));
-                return true;
-            }
+        if (button == 0 && clickRecipeEntry(mouseX, mouseY)) {
+            return true;
         }
 
         return mouseX >= x && mouseX < x + WIDTH && mouseY >= y && mouseY < y + HEIGHT;
+    }
+
+    /**
+     * Handles a primary click on a recipe tile without using Minecraft's
+     * recipe-book placement packet. NERB intentionally empties the vanilla
+     * recipe book, so that packet may be rejected even though the recipe exists.
+     */
+    public boolean clickRecipeEntry(double mouseX, double mouseY) {
+        if (!open) {
+            return false;
+        }
+
+        RecipeEntry entry = entryAt(mouseX, mouseY);
+        if (entry == null) {
+            return false;
+        }
+
+        if (minecraft.screen instanceof StorageWorkbenchScreen storageScreen) {
+            storageScreen.clearGhostRecipe();
+        }
+
+        PacketDistributor.sendToServer(new PlaceRecipePayload(
+                menu.containerId,
+                entry.holder().id(),
+                Screen.hasShiftDown()
+        ));
+        return true;
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
@@ -311,7 +330,17 @@ public final class WorkbenchRecipePanel {
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return open && searchBox.isFocused() && searchBox.keyPressed(keyCode, scanCode, modifiers);
+        if (!open || !searchBox.isFocused()) {
+            return false;
+        }
+
+        // Always consume key presses while the recipe search field is focused.
+        // EditBox returns false for normal letter keys because the actual text is
+        // inserted later through charTyped(). If we propagated that false result
+        // to the parent screen, keys such as E would reach Minecraft's inventory
+        // keybind and close the entire workbench while the player is typing.
+        searchBox.keyPressed(keyCode, scanCode, modifiers);
+        return true;
     }
 
     public boolean charTyped(char codePoint, int modifiers) {

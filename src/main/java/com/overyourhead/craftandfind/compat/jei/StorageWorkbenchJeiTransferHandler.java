@@ -1,6 +1,7 @@
 package com.overyourhead.craftandfind.compat.jei;
 
 import com.overyourhead.craftandfind.client.ClientStorageState;
+import com.overyourhead.craftandfind.common.network.payload.PlaceRecipePayload;
 import com.overyourhead.craftandfind.common.storage.StorageItemEntry;
 import mezz.jei.api.constants.RecipeTypes;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
@@ -19,6 +20,7 @@ import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -26,6 +28,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JEI sees the client side of the Storage Workbench as a normal CraftingMenu.
+ * The server owns StorageWorkbenchMenu, but MenuType.CRAFTING reconstructs a
+ * vanilla CraftingMenu on the client. Therefore this handler must target
+ * CraftingMenu and identify Craft & Find by its active storage snapshot.
+ */
 public final class StorageWorkbenchJeiTransferHandler
         implements IRecipeTransferHandler<CraftingMenu, RecipeHolder<CraftingRecipe>> {
     private static final int FIRST_INPUT_SLOT = 1;
@@ -100,14 +108,14 @@ public final class StorageWorkbenchJeiTransferHandler
             return null;
         }
 
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.gameMode == null) {
-            return helper.createInternalError();
-        }
-
-        // Use the same recipe-book packet the workbench already handles server-side.
-        // StorageWorkbenchMenu then pulls missing ingredients from NearbyStorage.
-        minecraft.gameMode.handlePlaceRecipe(container.containerId, recipe, maxTransfer);
+        // Do not use Minecraft's recipe-book placement packet: NERB may empty
+        // the vanilla recipe book. The Craft & Find packet goes directly to the
+        // server-side StorageWorkbenchMenu and its NearbyStorage placement code.
+        PacketDistributor.sendToServer(new PlaceRecipePayload(
+                container.containerId,
+                recipe.id(),
+                maxTransfer
+        ));
         return null;
     }
 

@@ -29,10 +29,10 @@ public final class StorageWorkbenchJeiGuiHandler implements IGuiContainerHandler
             double mouseX,
             double mouseY
     ) {
+        // Storage items remain normal JEI lookup targets. Recipe-result tiles
+        // are deliberately excluded here so JEI never steals their left click;
+        // keyboard R/U for those tiles is handled through RecipeViewerHooks.
         ItemStack stack = screen.storageItemUnderMouse(mouseX, mouseY);
-        if (stack.isEmpty()) {
-            stack = screen.recipeItemUnderMouse(mouseX, mouseY);
-        }
         if (stack.isEmpty()) {
             return Optional.empty();
         }

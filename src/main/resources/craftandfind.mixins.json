@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "client.CraftingMenuMixin",
+    "client.GhostIngredientAccessor",
     "client.RecipeBookComponentAccessor",
     "client.SlotPositionAccessor"
   ],

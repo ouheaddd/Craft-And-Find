@@ -17,6 +17,8 @@ public final class StorageWorkbenchEmiStackProvider implements EmiStackProvider<
             return EmiStackInteraction.EMPTY;
         }
 
-        return new EmiStackInteraction(EmiStack.of(stack));
+        // false = keyboard lookup target only. EMI will still see this stack for
+        // R/U, but normal mouse clicks remain owned by Craft & Find.
+        return new EmiStackInteraction(EmiStack.of(stack), null, false);
     }
 }
