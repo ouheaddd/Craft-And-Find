@@ -17,6 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -25,6 +26,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 
@@ -141,12 +144,48 @@ public final class StorageWorkbenchJeiTransferHandler
         }
 
         List<ItemStack> availableUnits = collectAvailableUnits(container, player, inputSlots.size());
+        // JEI inputs backed by tags may expose hundreds or thousands of candidate
+        // stacks. Never re-enumerate that stream for every inventory/storage unit
+        // (and on every recursive attempt in the bipartite matcher).
+        // Index available stacks by item, then build each slot's compatible
+        // unit indices only once. Components are still checked exactly.
+        Map<Item, List<Integer>> unitsByItem = new HashMap<>();
+        for (int index = 0; index < availableUnits.size(); index++) {
+            unitsByItem.computeIfAbsent(availableUnits.get(index).getItem(), ignored -> new ArrayList<>())
+                    .add(index);
+        }
+
+        List<int[]> compatibleUnits = new ArrayList<>(inputSlots.size());
+        for (IRecipeSlotView slot : inputSlots) {
+            boolean[] accepted = new boolean[availableUnits.size()];
+            slot.getItemStacks().forEach(candidate -> {
+                List<Integer> indices = unitsByItem.get(candidate.getItem());
+                if (indices == null) {
+                    return;
+                }
+                for (int index : indices) {
+                    if (ItemStack.isSameItemSameComponents(candidate, availableUnits.get(index))) {
+                        accepted[index] = true;
+                    }
+                }
+            });
+            int count = 0;
+            for (boolean value : accepted) {
+                if (value) count++;
+            }
+            int[] indices = new int[count];
+            int next = 0;
+            for (int index = 0; index < accepted.length; index++) {
+                if (accepted[index]) indices[next++] = index;
+            }
+            compatibleUnits.add(indices);
+        }
+
         int[] unitOwners = new int[availableUnits.size()];
         Arrays.fill(unitOwners, -1);
-
         for (int inputIndex = 0; inputIndex < inputSlots.size(); inputIndex++) {
             boolean[] visitedUnits = new boolean[availableUnits.size()];
-            tryAssignInput(inputIndex, inputSlots, availableUnits, unitOwners, visitedUnits);
+            tryAssignInput(inputIndex, compatibleUnits, unitOwners, visitedUnits);
         }
 
         boolean[] matchedInputs = new boolean[inputSlots.size()];
@@ -206,37 +245,22 @@ public final class StorageWorkbenchJeiTransferHandler
 
     private static boolean tryAssignInput(
             int inputIndex,
-            List<IRecipeSlotView> inputSlots,
-            List<ItemStack> availableUnits,
+            List<int[]> compatibleUnits,
             int[] unitOwners,
             boolean[] visitedUnits
     ) {
-        IRecipeSlotView inputSlot = inputSlots.get(inputIndex);
-
-        for (int unitIndex = 0; unitIndex < availableUnits.size(); unitIndex++) {
+        for (int unitIndex : compatibleUnits.get(inputIndex)) {
             if (visitedUnits[unitIndex]) {
                 continue;
             }
-
-            ItemStack available = availableUnits.get(unitIndex);
-            if (!slotAccepts(inputSlot, available)) {
-                continue;
-            }
-
             visitedUnits[unitIndex] = true;
             int previousOwner = unitOwners[unitIndex];
             if (previousOwner == -1
-                    || tryAssignInput(previousOwner, inputSlots, availableUnits, unitOwners, visitedUnits)) {
+                    || tryAssignInput(previousOwner, compatibleUnits, unitOwners, visitedUnits)) {
                 unitOwners[unitIndex] = inputIndex;
                 return true;
             }
         }
-
         return false;
-    }
-
-    private static boolean slotAccepts(IRecipeSlotView inputSlot, ItemStack available) {
-        return inputSlot.getItemStacks()
-                .anyMatch(candidate -> ItemStack.isSameItemSameComponents(candidate, available));
     }
 }
