@@ -38,11 +38,14 @@ public final class CraftAndFindMod {
 
     private void addCreativeTabContents(BuildCreativeModeTabContentsEvent event) {
         if (CreativeModeTabs.FUNCTIONAL_BLOCKS.equals(event.getTabKey())) {
-            event.insertAfter(
-                    Blocks.ENCHANTING_TABLE.asItem().getDefaultInstance(),
-                    ModItems.STORAGE_WORKBENCH_ITEM.get().getDefaultInstance(),
-                    CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS
-            );
+            var anchor = Blocks.ENCHANTING_TABLE.asItem().getDefaultInstance();
+            var workbench = ModItems.STORAGE_WORKBENCH_ITEM.get().getDefaultInstance();
+            // Other mods may remove the anchor from either creative-tab list.
+            if (event.getParentEntries().contains(anchor) && event.getSearchEntries().contains(anchor)) {
+                event.insertAfter(anchor, workbench, CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS);
+            } else {
+                event.accept(workbench, CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS);
+            }
         }
     }
 }
